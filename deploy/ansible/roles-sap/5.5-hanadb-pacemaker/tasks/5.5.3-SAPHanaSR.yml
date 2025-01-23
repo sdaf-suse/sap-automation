@@ -26,7 +26,7 @@
                                        - ansible_os_family | upper == "SUSE"
                                        - use_hanasr_angi | default(false)
   ansible.builtin.set_fact:
-    is_certified_for_hanasr_angi:      "{{ distribution_full_id in ['sles_sap15.4', 'sles_sap15.5', 'sles_sap15.6'] | default(false) }}"
+    is_certified_for_hanasr_angi:      "{{ distribution_full_id in ['sles_sap15.4', 'sles_sap15.5', 'sles_sap15.6', 'sles_sap15.7'] | default(false) }}"
 
 - name:                                "5.5 HANA Pacemaker - Check SAP HANA version requirements"
   ansible.builtin.assert:
