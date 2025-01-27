@@ -282,15 +282,6 @@ rhel*)
 	;;
 esac
 
-if [ "$(get_distro_version)" == "15.4" ]; then
-	error "Unsupported distro: ${distro_name_version} at this time."
-	exit 1
-fi
-if [ "$(get_distro_version)" == "15.5" ]; then
-	error "Unsupported distro: ${distro_name_version} at this time."
-	exit 1
-fi
-
 case "$(get_distro_name_version)" in
 sles*)
 	set +o errexit
@@ -313,7 +304,9 @@ ubuntu)
 	;;
 sles)
 	echo "we are inside sles"
-	ansible_version="2.11"
+	SLS_PYTHON_CMD=$(ls -1 /usr/bin/python3.* | grep -E 'python3\.[0-9]+$' | sort -V | tail -n1)
+	export SLS_PYTHON_CMD
+	ansible_version="2.16"
 	ansible_major="${ansible_version%%.*}"
 	ansible_minor=$(echo "${ansible_version}." | cut -d . -f 2)
 	# Ansible installation directories
@@ -323,7 +316,7 @@ sles)
 	ansible_venv_bin="${ansible_venv}/bin"
 	ansible_collections="${ansible_base}/collections"
 	ansible_pip3="${ansible_venv_bin}/pip3"
-	sudo python3 -m pip install virtualenv
+	sudo ${SLS_PYTHON_CMD} -m pip install virtualenv
 	;;
 rhel)
 	echo "we are inside RHEL"
@@ -377,7 +370,7 @@ ubuntu)
 sles)
 	required_pkgs+=(
 		curl
-		python3-pip
+		"${SLS_PYTHON_CMD}-pip"
 		lsb-release
 	)
 	;;
