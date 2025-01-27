@@ -383,6 +383,7 @@ sles)
 	required_pkgs+=(
 		curl
 		"${SLS_PYTHON_MIN}-pip"
+		"${SLS_PYTHON_MIN}-virtualenv"
 		lsb-release
 	)
 	;;
