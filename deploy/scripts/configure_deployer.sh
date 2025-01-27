@@ -304,8 +304,20 @@ ubuntu)
 	;;
 sles)
 	echo "we are inside sles"
-	SLS_PYTHON_CMD=$(ls -1 /usr/bin/python3.* | grep -E 'python3\.[0-9]+$' | sort -V | tail -n1)
+	max_ver=0
+	for f in /usr/bin/python3.*; do
+		[[ "$f" =~ python3\.([0-9]+)$ ]] || continue
+		ver="${BASH_REMATCH[1]}"
+		if (( ver > max_ver )); then
+			max_ver="$ver"
+			SLS_PYTHON_CMD="$f"
+		fi
+	done
 	export SLS_PYTHON_CMD
+	SLS_PYTHON_VER=$(basename $SLS_PYTHON_CMD)
+	SLS_PYTHON_MIN=$(echo "${SLS_PYTHON_VER}" | tr -d '.')
+	export SLS_PYTHON_VER
+	export SLS_PYTHON_MIN
 	ansible_version="2.16"
 	ansible_major="${ansible_version%%.*}"
 	ansible_minor=$(echo "${ansible_version}." | cut -d . -f 2)
@@ -316,7 +328,7 @@ sles)
 	ansible_venv_bin="${ansible_venv}/bin"
 	ansible_collections="${ansible_base}/collections"
 	ansible_pip3="${ansible_venv_bin}/pip3"
-	sudo ${SLS_PYTHON_CMD} -m pip install virtualenv
+	sudo "${SLS_PYTHON_CMD}" -m pip install virtualenv
 	;;
 rhel)
 	echo "we are inside RHEL"
@@ -370,7 +382,7 @@ ubuntu)
 sles)
 	required_pkgs+=(
 		curl
-		"${SLS_PYTHON_CMD}-pip"
+		"${SLS_PYTHON_MIN}-pip"
 		lsb-release
 	)
 	;;
@@ -557,10 +569,16 @@ sudo mkdir -p \
 
 # Create a Python3 based venv into which we will install Ansible.
 case "$(get_distro_name)" in
-ubuntu | sles)
+ubuntu | debian)
 	if [[ ! -e "${ansible_venv_bin}/activate" ]]; then
 		sudo rm -rf "${ansible_venv}"
 		sudo virtualenv --python python3 "${ansible_venv}"
+	fi
+	;;
+sles)
+	if [[ ! -e "${ansible_venv_bin}/activate" ]]; then
+		sudo rm -rf "${ansible_venv}"
+		sudo virtualenv --python "${SLS_PYTHON_CMD}" "${ansible_venv}"
 	fi
 	;;
 rhel*)
