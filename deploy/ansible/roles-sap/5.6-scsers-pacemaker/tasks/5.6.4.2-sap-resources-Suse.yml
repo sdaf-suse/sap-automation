@@ -213,14 +213,17 @@
 
 # https://www.suse.com/support/kb/doc/?id=000021133
 # https://www.ibm.com/docs/en/db2/11.5.x?topic=pacemaker-prerequisites-integrated-solution-using
-- name:                                "5.6 SCSERS - SUSE - Wait for the cluster to be online"
-  ansible.builtin.wait_for:
-    delay:                             120
-    timeout:                           "{{ cluster_status_report_wait_in_s | int }}"
-    state:                             started
-    port:                              3121
-  register:                            wait_for_cluster_online
-  until:                               wait_for_cluster_online is succeeded
+- name:                                "5.6 SCSERS - SUSE - Wait for cluster CIB availability after reboot"
+  become:                              true
+  become_user:                         root
+  ansible.builtin.shell: |
+                                       # Check if CIB is accessible and cluster is responsive
+                                       timeout 30 cibadmin -Q > /dev/null 2>&1
+  register:                            cib_check
+  until:                               cib_check.rc == 0
+  retries:                             10
+  delay:                               30
+  tags:                                cluster_readiness
 
 - name:                                "5.6 SCSERS - SUSE - Set the Cluster out of maintenance mode"
   ansible.builtin.shell:               crm configure property maintenance-mode=false
