@@ -244,12 +244,30 @@
 
 - name:                                "5.6 SCSERS - SLES - Reboot and wait 5 minutes"
   ansible.builtin.debug:
-    msg:                               "Reboot and wait 3 minutes"
+    msg:                               "Reboot and wait 5 minutes"
 
 - name:                                "5.6 SCSERS - SUSE - Reboot the primary/secondary instance"
   ansible.builtin.reboot:
-    reboot_timeout:                    90
-    post_reboot_delay:                 90
+    reboot_timeout:                    150
+    post_reboot_delay:                 150
+
+- name:                                "5.6 SCSERS - SUSE - Wait for the primary/secondary instance to come back online"
+  ansible.builtin.wait_for_connection:
+    delay:                             30
+    timeout:                           60
+  register:                            wait_for_connection
+  until:                               wait_for_connection is succeeded
+
+# https://www.suse.com/support/kb/doc/?id=000021133
+# https://www.ibm.com/docs/en/db2/11.5.x?topic=pacemaker-prerequisites-integrated-solution-using
+- name:                                "5.6 SCSERS - SUSE - Wait for the cluster to be online"
+  ansible.builtin.wait_for:
+    delay:                             120
+    timeout:                           "{{ cluster_status_report_wait_in_s | int }}"
+    state:                             started
+    port:                              3121
+  register:                            wait_for_cluster_online
+  until:                               wait_for_cluster_online is succeeded
 
 - name:                                "5.6 SCSERS - SUSE - Set the Cluster out of maintenance mode"
   ansible.builtin.shell:               crm configure property maintenance-mode=false
