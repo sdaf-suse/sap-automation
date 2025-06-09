@@ -221,7 +221,7 @@
                                        timeout 30 cibadmin -Q > /dev/null 2>&1
   register:                            cib_check
   until:                               cib_check.rc == 0
-  retries:                             10
+  retries:                             11
   delay:                               30
   tags:                                cluster_readiness
 
