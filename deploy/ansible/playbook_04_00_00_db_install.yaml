@@ -301,6 +301,7 @@
             name:                          root
             update_password:               always
             password:                      "{{ hostvars.localhost.root_password | password_hash('sha512') }}"
+            password_lock:                 false
 
         - name:                            Enable {{ item.key }} in /etc/ssh/sshd_config
           become:                          true
@@ -313,6 +314,14 @@
             - { key: "PermitRootLogin", value: "yes" }
             - { key: "PasswordAuthentication", value: "yes" }
             - { key: "ChallengeResponseAuthentication", value: "yes" }
+
+        - name:                            Append root user to AllowUsers if used
+          ansible.builtin.lineinfile:
+            path:                          "/etc/ssh/sshd_config"
+            regexp:                        '^AllowUsers (?!.*root.*)(.*)'
+            line:                          'AllowUsers \g<1> root'
+            backrefs:                      true
+            state:                         present
 
         - name:                            "Restart SSHD on {{ ansible_hostname }}"
           become:                          true
