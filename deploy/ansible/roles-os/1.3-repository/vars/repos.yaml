@@ -31,7 +31,10 @@ repos:
   redhat8.10:
   redhat9.0:
   redhat9.2:
-  # do not have any repos that are needed for RedHat at the moment.
+  redhat9.4:
+
+  # SLES
+  sles12.3:
   sles_sap12.3:
   sles_sap12.4:
   sles_sap12.5:
