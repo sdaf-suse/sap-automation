@@ -13,6 +13,9 @@
 #   * Installs the specified version of terraform so that it
 #     is available for all users.
 #
+#   * Installs the specified version of opentofu so that it
+#     is available for all users.
+#
 #   * Installs the Azure CLI using the provided installer
 #     script, making it available for all users.
 #
@@ -63,6 +66,11 @@ ARM_TENANT_ID="${tenant_id}"
 local_user="${local_user}"
 use_webapp="${use_webapp}"
 ansible_version="${ansible_core_version}"
+
+#
+# OpenTofu Version settings
+#
+opentofu_version="${opentofu_version:-1.10.3}"
 
 PAT="${pat}"
 DEVURL="${ado_repo}"
@@ -231,6 +239,33 @@ pkg_mgr_install() {
 }
 
 #
+# OpenTofu Installation Function
+#
+install_opentofu() {
+  echo "Installing OpenTofu version $${opentofu_version}..."
+
+  # Create OpenTofu directories
+  sudo mkdir -p \
+    "$${tofu_dir}" \
+    "$${tofu_bin}"
+
+  # Download OpenTofu binary from GitHub releases
+  wget -nv -O "/$${asad_home}/$${tofu_zip}" "https://github.com/opentofu/opentofu/releases/download/v$${opentofu_version}/$${tofu_zip}"
+
+  # Extract to version-specific directory
+  sudo unzip -qq -o "/$${asad_home}/$${tofu_zip}" -d "$${tofu_dir}"
+
+  # Create symlink for easy access
+  sudo ln -vfs "../$(basename "$${tofu_dir}")/tofu" "$${tofu_bin}/tofu"
+  sudo chmod 755 "$${tofu_bin}/tofu"
+
+  # Remove the downloaded zip file
+  sudo rm "/$${asad_home}/$${tofu_zip}"
+
+  echo "OpenTofu $${opentofu_version} installation completed"
+}
+
+#
 # Directories and paths
 #
 
@@ -258,6 +293,13 @@ tf_dir="$${tf_base}/terraform_$${terraform_version}"
 tf_bin="$${tf_base}/bin"
 tf_zip="terraform_$${terraform_version}_linux_amd64.zip"
 tf_cache="$${tf_base}/.terraform.d/plugin-cache"
+
+# OpenTofu installation directories
+tofu_base="/opt/opentofu"
+tofu_dir="$${tofu_base}/opentofu_$${opentofu_version}"
+tofu_bin="$${tofu_base}/bin"
+tofu_zip="tofu_$${opentofu_version}_linux_amd64.zip"
+
 export AZADHOME="/home/$${local_user}"
 
 #
@@ -455,6 +497,11 @@ sudo ln -vfs "../$(basename "$${tf_dir}")/terraform" "$${tf_bin}/terraform"
 sudo chmod 755 "$${tf_bin}/terraform"
 
 sudo rm "/$${asad_home}/$${tf_zip}"
+
+#
+# Install OpenTofu for all users
+#
+install_opentofu
 
 # Uninstall Azure CLI - For some platforms
 case "$(get_distro_name)" in
@@ -693,7 +740,7 @@ rhel*)
   ;;
 esac
 
-export PATH="$${PATH}":"$${ansible_bin}":"$${tf_bin}":"$${DOTNET_ROOT}"
+export PATH="$${PATH}":"$${ansible_bin}":"$${tf_bin}":"$${tofu_bin}":"$${DOTNET_ROOT}"
 
 (echo export AZADHOME="/home/$${local_user}" | sudo tee -a /etc/profile.d/deploy_server.sh) >/dev/null 2>&1
 
@@ -708,7 +755,7 @@ export PATH="$${PATH}":"$${ansible_bin}":"$${tf_bin}":"$${DOTNET_ROOT}"
 
 # Add new /opt bin directories to start of PATH to ensure the versions we installed
 # are preferred over any installed standard system versions.
-echo export "PATH=$${ansible_bin}:$${tf_bin}:$${PATH}":"$${DOTNET_ROOT}":"$${AZADHOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/scripts" | sudo tee -a /etc/profile.d/deploy_server.sh
+echo export "PATH=$${ansible_bin}:$${tf_bin}:$${tofu_bin}:$${PATH}":"$${DOTNET_ROOT}":"$${AZADHOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/scripts" | sudo tee -a /etc/profile.d/deploy_server.sh
 
 # Ensure that the user's account is logged in to Azure with specified creds
 (echo az login --identity --allow-no-subscriptions --client-id "$${ARM_CLIENT_ID}" --output none | sudo tee -a /etc/profile.d/deploy_server.sh) >/dev/null 2>&1
@@ -779,7 +826,7 @@ else
 
     sudo touch "$${agent_home}/agent_configured"
 
-    echo export "PATH=$${ansible_bin}:$${tf_bin}:"'$${PATH}'::"$${DOTNET_ROOT}" | sudo tee -a /etc/profile.d/deploy_server.sh
+    echo export "PATH=$${ansible_bin}:$${tf_bin}:$${tofu_bin}:"'$${PATH}'::"$${DOTNET_ROOT}" | sudo tee -a /etc/profile.d/deploy_server.sh
     sudo chmod 775 /etc/profile.d/deploy_server.sh
     # Install dotNet
     case "$(get_distro_name)" in
@@ -803,7 +850,7 @@ else
     esac
   else
     echo "NO PAT specified"
-    echo export "PATH=$${ansible_bin}:$${tf_bin}:"'$${PATH}'::"$${DOTNET_ROOT}":'$${AZADHOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/scripts' | sudo tee -a /etc/profile.d/deploy_server.sh
+    echo export "PATH=$${ansible_bin}:$${tf_bin}:$${tofu_bin}:"'$${PATH}'::"$${DOTNET_ROOT}":'$${AZADHOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/scripts' | sudo tee -a /etc/profile.d/deploy_server.sh
     sudo chmod 775 /etc/profile.d/deploy_server.sh
 
     echo "export SAP_AUTOMATION_REPO_PATH='$${AZADHOME}/Azure_SAP_Automated_Deployment/sap-automation'" | sudo tee -a /etc/profile.d/deploy_server.sh
