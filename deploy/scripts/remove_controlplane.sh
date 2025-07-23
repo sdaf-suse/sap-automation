@@ -19,6 +19,9 @@ script_directory="$(dirname "${full_script_path}")"
 #call stack has full script name when using source
 source "${script_directory}/deploy_utils.sh"
 
+# Set the executable command for terraform/tofu
+TOFU_CMD="${TOFU_CMD:-tofu}"
+
 #helper files
 source "${script_directory}/helpers/script_helpers.sh"
 
@@ -321,7 +324,7 @@ if [ -f .terraform/terraform.tfstate ]; then
 	azure_backend=$(grep "\"type\": \"azurerm\"" .terraform/terraform.tfstate || true)
 	if [ -n "$azure_backend" ]; then
 		echo "Terraform state:                     remote"
-		if terraform -chdir="${terraform_module_directory}" init -migrate-state -upgrade -force-copy --backend-config "path=${param_dirname}/terraform.tfstate"; then
+		if $TOFU_CMD -chdir="${terraform_module_directory}" init -migrate-state -upgrade -force-copy --backend-config "path=${param_dirname}/terraform.tfstate"; then
 			return_value=$?
 			print_banner "Remove Control Plane " "Terraform init succeeded (deployer - local)" "success"
 		else
@@ -331,7 +334,7 @@ if [ -f .terraform/terraform.tfstate ]; then
 
 	else
 		echo "Terraform state:                     local"
-		if terraform -chdir="${terraform_module_directory}" init -upgrade --backend-config "path=${param_dirname}/terraform.tfstate"; then
+		if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade --backend-config "path=${param_dirname}/terraform.tfstate"; then
 			return_value=$?
 			print_banner "Remove Control Plane " "Terraform init succeeded (deployer - local)" "success"
 		else
@@ -342,7 +345,7 @@ if [ -f .terraform/terraform.tfstate ]; then
 	fi
 else
 	echo "Terraform state:                     unknown"
-	if terraform -chdir="${terraform_module_directory}" init -reconfigure -upgrade --backend-config "path=${param_dirname}/terraform.tfstate"; then
+	if $TOFU_CMD -chdir="${terraform_module_directory}" init -reconfigure -upgrade --backend-config "path=${param_dirname}/terraform.tfstate"; then
 		return_value=$?
 		print_banner "Remove Control Plane " "Terraform init succeeded (deployer - local)" "success"
 	else
@@ -357,7 +360,7 @@ if [ 0 != $return_value ]; then
 	exit 10
 fi
 
-if terraform -chdir="${terraform_module_directory}" apply -input=false -var-file="${deployer_parameter_file}" "${approve_parameter}"; then
+if $TOFU_CMD -chdir="${terraform_module_directory}" apply -input=false -var-file="${deployer_parameter_file}" "${approve_parameter}"; then
 	return_value=$?
 	print_banner "Remove Control Plane " "Terraform apply (deployer) succeeded" "success"
 else
@@ -366,8 +369,8 @@ fi
 
 print_banner "Remove Control Plane " "Running Terraform init (library - local)" "info"
 
-if ! terraform -chdir="${terraform_module_directory}" output | grep "No outputs"; then
-	keyvault_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_arm_id | tr -d \")
+if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+	keyvault_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_arm_id | tr -d \")
 	TF_VAR_spn_keyvault_id="${keyvault_id}"
 	export TF_VAR_spn_keyvault_id
 fi
@@ -389,7 +392,7 @@ if [ -f .terraform/terraform.tfstate ]; then
 	azure_backend=$(grep "\"type\": \"azurerm\"" .terraform/terraform.tfstate || true)
 	if [ -n "$azure_backend" ]; then
 		echo "Terraform state:                     remote"
-		if terraform -chdir="${terraform_module_directory}" init -upgrade -force-copy -migrate-state --backend-config "path=${param_dirname}/terraform.tfstate"; then
+		if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade -force-copy -migrate-state --backend-config "path=${param_dirname}/terraform.tfstate"; then
 			return_value=$?
 			print_banner "Remove Control Plane " "Terraform init succeeded (library - local)" "success"
 		else
@@ -400,7 +403,7 @@ if [ -f .terraform/terraform.tfstate ]; then
 		fi
 	else
 		echo "Terraform state:                     local"
-		if terraform -chdir="${terraform_module_directory}" init -upgrade -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
+		if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
 			return_value=$?
 			print_banner "Remove Control Plane " "Terraform init succeeded (library - local)" "success"
 		else
@@ -412,7 +415,7 @@ if [ -f .terraform/terraform.tfstate ]; then
 	fi
 else
 	echo "Terraform state:                     unknown"
-	if terraform -chdir="${terraform_module_directory}" init -upgrade -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
+	if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
 		return_value=$?
 		print_banner "Remove Control Plane " "Terraform init succeeded (library - local)" "success"
 	else
@@ -436,7 +439,7 @@ export TF_use_spn=false
 
 print_banner "Remove Control Plane " "Running Terraform destroy (library)" "info"
 
-if terraform -chdir="${terraform_module_directory}" destroy -input=false -var-file="${library_parameter_file}" -var deployer_statefile_foldername="${deployer_statefile_foldername_path}" "${approve_parameter}"; then
+if $TOFU_CMD -chdir="${terraform_module_directory}" destroy -input=false -var-file="${library_parameter_file}" -var deployer_statefile_foldername="${deployer_statefile_foldername_path}" "${approve_parameter}"; then
 	return_value=$?
 	print_banner "Remove Control Plane " "Terraform destroy (library) succeeded" "success"
 else
@@ -502,7 +505,7 @@ else
 	echo "#########################################################################################"
 	echo ""
 
-	if terraform -chdir="${terraform_module_directory}" destroy -var-file="${var_file}" "${approve_parameter}"; then
+	if $TOFU_CMD -chdir="${terraform_module_directory}" destroy -var-file="${var_file}" "${approve_parameter}"; then
 		return_value=$?
 		echo ""
 		echo -e "${cyan}Terraform destroy:                      succeeded$reset_formatting"

@@ -611,7 +611,7 @@ if [ "$resource_group_exist" ]; then
 			fi
 		else
 			# shellcheck disable=SC2086
-			if terraform -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
+			if $TOFU_CMD -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
 				return_value=$?
 				echo ""
 				echo -e "${cyan}Terraform destroy:                     succeeded$reset_formatting"

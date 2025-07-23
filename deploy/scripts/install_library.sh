@@ -15,6 +15,9 @@ reset_formatting="\e[0m"
 full_script_path="$(realpath "${BASH_SOURCE[0]}")"
 script_directory="$(dirname "${full_script_path}")"
 
+# Infrastructure as Code tool selection (terraform or tofu)
+TOFU_CMD="${TOFU_CMD:-tofu}"
+
 #call stack has full script name when using source
 source "${script_directory}/deploy_utils.sh"
 
@@ -285,7 +288,7 @@ if [ ! -d ./.terraform/ ]; then
 	echo "#                                   New deployment                                      #"
 	echo "#                                                                                       #"
 	echo "#########################################################################################"
-	terraform -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
+	$TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
 	sed -i /REMOTE_STATE_RG/d "${library_config_information}"
 	sed -i /REMOTE_STATE_SA/d "${library_config_information}"
 	sed -i /tfstate_resource_id/d "${library_config_information}"
@@ -315,7 +318,7 @@ else
 
 				terraform_module_directory="${SAP_AUTOMATION_REPO_PATH}/deploy/terraform/run/sap_library"/
 
-				if terraform -chdir="${terraform_module_directory}" init \
+				if $TOFU_CMD -chdir="${terraform_module_directory}" init \
 					--backend-config "subscription_id=$REINSTALL_SUBSCRIPTION" \
 					--backend-config "resource_group_name=$REINSTALL_RESOURCE_GROUP" \
 					--backend-config "storage_account_name=$REINSTALL_ACCOUNTNAME" \
@@ -323,23 +326,23 @@ else
 					--backend-config "key=${key}.terraform.tfstate"; then
 					print_banner "$banner_title" "Terraform init succeeded." "success"
 
-					terraform -chdir="${terraform_module_directory}" refresh -var-file="${var_file}" -input=false \
+					$TOFU_CMD -chdir="${terraform_module_directory}" refresh -var-file="${var_file}" -input=false \
 						-var deployer_statefile_foldername="${deployer_statefile_foldername}"
 				else
 					print_banner "$banner_title" "Terraform init failed." "error" "Terraform init return code: $return_value"
 					exit 10
 				fi
 			else
-				if terraform -chdir="${terraform_module_directory}" init -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
+				if $TOFU_CMD -chdir="${terraform_module_directory}" init -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
 					print_banner "$banner_title" "Terraform init succeeded." "success"
-					terraform -chdir="${terraform_module_directory}" refresh -var-file="${var_file}"
+					$TOFU_CMD -chdir="${terraform_module_directory}" refresh -var-file="${var_file}"
 				else
 					print_banner "$banner_title" "Terraform init failed." "error" "Terraform init return code: $return_value"
 					exit 10
 				fi
 			fi
 		else
-			if terraform -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
+			if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
 				print_banner "$banner_title" "Terraform init succeeded." "success"
 			else
 				print_banner "$banner_title" "Terraform init failed." "error" "Terraform init return code: $return_value"
@@ -349,7 +352,7 @@ else
 		fi
 
 	else
-		if terraform -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
+		if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
 			echo ""
 			print_banner "$banner_title" "Terraform init succeeded." "success"
 			echo ""
@@ -377,7 +380,7 @@ install_library_return_value=0
 
 if [ -n "${deployer_statefile_foldername}" ]; then
 	echo "Deployer folder specified:           ${deployer_statefile_foldername}"
-	terraform -chdir="${terraform_module_directory}" plan -no-color -detailed-exitcode \
+	$TOFU_CMD -chdir="${terraform_module_directory}" plan -no-color -detailed-exitcode \
 		-var-file="${var_file}" -input=false \
 		-var deployer_statefile_foldername="${deployer_statefile_foldername}" | tee -a plan_output.log
 	install_library_return_value=${PIPESTATUS[0]}
@@ -394,7 +397,7 @@ if [ -n "${deployer_statefile_foldername}" ]; then
 	allImportParameters=$(printf " -var-file=%s -var deployer_statefile_foldername=%s %s " "${var_file}" "${deployer_statefile_foldername}" "${extra_vars}")
 
 else
-	terraform -chdir="${terraform_module_directory}" plan -no-color -detailed-exitcode \
+	$TOFU_CMD -chdir="${terraform_module_directory}" plan -no-color -detailed-exitcode \
 		-var-file="${var_file}" -input=false | tee -a plan_output.log
 	install_library_return_value=${PIPESTATUS[0]}
 	if [ $install_library_return_value -eq 1 ]; then
@@ -434,12 +437,12 @@ echo ""
 
 if [ -n "${approve}" ]; then
 	# shellcheck disable=SC2086
-	terraform -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -no-color -compact-warnings -json -input=false $allParameters --auto-approve | tee apply_output.json
+	$TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -no-color -compact-warnings -json -input=false $allParameters --auto-approve | tee apply_output.json
 	install_library_return_value=${PIPESTATUS[0]}
 
 else
 	# shellcheck disable=SC2086
-	terraform -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -input=false $allParameters
+	$TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -input=false $allParameters
 	install_library_return_value=$?
 fi
 
@@ -518,22 +521,22 @@ if [ 1 == $install_library_return_value ]; then
 fi
 
 if [ "$DEBUG" = True ]; then
-	terraform -chdir="${terraform_module_directory}" output
+	$TOFU_CMD -chdir="${terraform_module_directory}" output
 fi
 
-if ! terraform -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 
-	tfstate_resource_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw tfstate_resource_id | tr -d \")
+	tfstate_resource_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw tfstate_resource_id | tr -d \")
 	STATE_SUBSCRIPTION=$(echo "$tfstate_resource_id" | cut -d/ -f3 | tr -d \" | xargs)
 
 	az account set --sub "$STATE_SUBSCRIPTION"
 
-	REMOTE_STATE_SA=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
+	REMOTE_STATE_SA=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
 	export REMOTE_STATE_SA
 
 	getAndStoreTerraformStateStorageAccountDetails "${REMOTE_STATE_SA}" "${library_config_information}"
 
-	library_random_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+	library_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 	if [ -n "${library_random_id}" ]; then
 		save_config_var "library_random_id" "${library_config_information}"
 		custom_random_id="${library_random_id:0:3}"

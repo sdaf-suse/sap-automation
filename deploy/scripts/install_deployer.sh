@@ -15,6 +15,9 @@ reset_formatting="\e[0m"
 full_script_path="$(realpath "${BASH_SOURCE[0]}")"
 script_directory="$(dirname "${full_script_path}")"
 
+# Infrastructure as Code tool selection (terraform or tofu)
+TOFU_CMD="${TOFU_CMD:-tofu}"
+
 #call stack has full script name when using source
 source "${script_directory}/deploy_utils.sh"
 
@@ -193,7 +196,7 @@ allImportParameters=$(printf " -var-file=%s %s " "${var_file}" "${extra_vars}")
 
 if [ ! -d ./.terraform/ ]; then
 	print_banner "New deployment" "info"
-	terraform -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
+	$TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
 else
 	if [ -f ./.terraform/terraform.tfstate ]; then
 		azure_backend=$(grep "\"type\": \"azurerm\"" .terraform/terraform.tfstate || true)
@@ -216,7 +219,7 @@ else
 
 				terraform_module_directory="${SAP_AUTOMATION_REPO_PATH}/deploy/terraform/run/sap_deployer"/
 
-				if terraform -chdir="${terraform_module_directory}" init -upgrade=true -migrate-state \
+				if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -migrate-state \
 					--backend-config "subscription_id=$REINSTALL_SUBSCRIPTION" \
 					--backend-config "resource_group_name=$REINSTALL_RESOURCE_GROUP" \
 					--backend-config "storage_account_name=$REINSTALL_ACCOUNTNAME" \
@@ -225,8 +228,8 @@ else
 					echo ""
 					echo -e "${cyan}Terraform init:                        succeeded$reset_formatting"
 					echo ""
-					terraform -chdir="${terraform_module_directory}" refresh -var-file="${var_file}"
-					keyvault_id=$(terraform -chdir="${terraform_module_directory}" output deployer_kv_user_arm_id | tr -d \")
+					$TOFU_CMD -chdir="${terraform_module_directory}" refresh -var-file="${var_file}"
+					keyvault_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output deployer_kv_user_arm_id | tr -d \")
 					echo "$keyvault_id"
 					keyvault=$(echo "$keyvault_id" | cut -d / -f9)
 					keyvault_resource_group=$(echo "$keyvault_id" | cut -d / -f5)
@@ -242,16 +245,16 @@ else
 					exit 10
 				fi
 			else
-				if terraform -chdir="${terraform_module_directory}" init -upgrade=true -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
+				if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
 					print_banner "Install Deployer" "Terraform init: succeeded" "success"
-					terraform -chdir="${terraform_module_directory}" refresh -var-file="${var_file}"
+					$TOFU_CMD -chdir="${terraform_module_directory}" refresh -var-file="${var_file}"
 				else
 					print_banner "Install Deployer" "Terraform init: failed" "error"
 					exit 10
 				fi
 			fi
 		else
-			if terraform -chdir="${terraform_module_directory}" init -migrate-state -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
+			if $TOFU_CMD -chdir="${terraform_module_directory}" init -migrate-state -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
 				print_banner "Install Deployer" "Terraform init: succeeded" "success"
 			else
 				echo ""
@@ -262,10 +265,10 @@ else
 
 	else
 		print_banner "Install Deployer" "New deployment" "info"
-		terraform -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
+		$TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
 	fi
 	echo "Parameters:                          $allParameters"
-	terraform -chdir="${terraform_module_directory}" refresh $allParameters
+	$TOFU_CMD -chdir="${terraform_module_directory}" refresh $allParameters
 fi
 install_deployer_return_value=$?
 if [ 1 == $install_deployer_return_value ]; then
@@ -291,7 +294,7 @@ echo ""
 
 # shellcheck disable=SC2086
 
-if terraform -chdir="$terraform_module_directory" plan -detailed-exitcode -input=false -out="$deployer_plan_name" $allParameters | tee plan_output.log; then
+if $TOFU_CMD -chdir="$terraform_module_directory" plan -detailed-exitcode -input=false -out="$deployer_plan_name" $allParameters | tee plan_output.log; then
 	install_deployer_return_value=${PIPESTATUS[0]}
 else
 	install_deployer_return_value=${PIPESTATUS[0]}
@@ -364,7 +367,7 @@ install_deployer_return_value=0
 
 if [ -n "${approve}" ]; then
 	# shellcheck disable=SC2086
-	if terraform -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" \
+	if $TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" \
 		-no-color -compact-warnings -json -input=false -auto-approve "$deployer_plan_name" | tee apply_output.json; then
 		install_deployer_return_value=${PIPESTATUS[0]}
 	else
@@ -389,7 +392,7 @@ if [ -n "${approve}" ]; then
 	fi
 else
 	# shellcheck disable=SC2086
-	if terraform -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" "${deployer_plan_name}"; then
+	if $TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" "${deployer_plan_name}"; then
 		install_deployer_return_value=${PIPESTATUS[0]}
 	else
 		install_deployer_return_value=${PIPESTATUS[0]}
@@ -483,7 +486,7 @@ if [ 0 != $install_deployer_return_value ]; then
 	exit $install_deployer_return_value
 fi
 
-if DEPLOYER_KEYVAULT=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \"); then
+if DEPLOYER_KEYVAULT=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \"); then
 	touch "${deployer_config_information}"
 	printf -v val %-.20s "$DEPLOYER_KEYVAULT"
 	save_config_var "DEPLOYER_KEYVAULT" "${deployer_config_information}"
@@ -502,7 +505,7 @@ else
 	install_deployer_return_value=2
 fi
 
-deployer_random_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+deployer_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 if [ -n "${deployer_random_id}" ]; then
 	custom_random_id="${deployer_random_id:0:3}"
 	sed -i -e /"custom_random_id"/d "${var_file}"

@@ -3,6 +3,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+# Infrastructure as Code tool selection (terraform or tofu)
+TOFU_CMD="${TOFU_CMD:-tofu}"
+
 #colors for terminal
 bold_red="\e[1;31m"
 cyan="\e[1;36m"
@@ -1012,7 +1015,7 @@ function ReplaceResourceInStateFile {
 
 	# shellcheck disable=SC2086
 	if [ -z $STORAGE_ACCOUNT_ID ]; then
-		azureResourceID=$(terraform -chdir="${terraform_module_directory}" state show "${moduleID}" | grep -m1 $3 | xargs | cut -d "=" -f2 | xargs)
+		azureResourceID=$($TOFU_CMD -chdir="${terraform_module_directory}" state show "${moduleID}" | grep -m1 $3 | xargs | cut -d "=" -f2 | xargs)
 		tempString=$(echo "${azureResourceID}" | grep "/fileshares/")
 		if [ -n "${tempString}" ]; then
 			# Use sed to replace /fileshares/ with /shares/
@@ -1027,11 +1030,11 @@ function ReplaceResourceInStateFile {
 	echo "Azure resource ID:      $azureResourceID"
 	if [ -n "${azureResourceID}" ]; then
 		echo "Removing storage account state object:           ${moduleID} "
-		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 			echo "Importing storage account state object:           ${moduleID}"
-			echo "terraform -chdir=${terraform_module_directory} import -var-file=${var_file} -var deployer_tfstate_key=${deployer_tfstate_key} -var tfstate_resource_id=${tfstate_resource_id} $4 ${moduleID} ${azureResourceID}"
+			echo "$TOFU_CMD -chdir=${terraform_module_directory} import -var-file=${var_file} -var deployer_tfstate_key=${deployer_tfstate_key} -var tfstate_resource_id=${tfstate_resource_id} $4 ${moduleID} ${azureResourceID}"
 			echo ""
-			if ! terraform -chdir="${terraform_module_directory}" import -var-file="${var_file}" -var "deployer_tfstate_key=${deployer_tfstate_key}" -var "tfstate_resource_id=${tfstate_resource_id}" $4 "${moduleID}" "${azureResourceID}"; then
+			if ! $TOFU_CMD -chdir="${terraform_module_directory}" import -var-file="${var_file}" -var "deployer_tfstate_key=${deployer_tfstate_key}" -var "tfstate_resource_id=${tfstate_resource_id}" $4 "${moduleID}" "${azureResourceID}"; then
 				echo -e "$bold_red Importing storage account state object:           ${moduleID} failed $reset_formatting"
 				exit 65
 			fi
@@ -1105,12 +1108,12 @@ function ImportAndReRunApply {
 					azureResourceID=$(jq -c -r '.summary' <<<"$item" | awk -F'\"' '{print $2}')
 					echo "Trying to import $azureResourceID into $moduleID"
 					# shellcheck disable=SC2086
-					echo terraform -chdir="${terraform_module_directory}" import $importParameters "${moduleID}" "${azureResourceID}"
+					echo $TOFU_CMD -chdir="${terraform_module_directory}" import $importParameters "${moduleID}" "${azureResourceID}"
 					echo ""
 					# shellcheck disable=SC2086
-					if ! terraform -chdir="${terraform_module_directory}" import $importParameters "${moduleID}" "${azureResourceID}"; then
-						if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-							if ! terraform -chdir="${terraform_module_directory}" import $importParameters "${moduleID}" "${azureResourceID}"; then
+					if ! $TOFU_CMD -chdir="${terraform_module_directory}" import $importParameters "${moduleID}" "${azureResourceID}"; then
+						if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+							if ! $TOFU_CMD -chdir="${terraform_module_directory}" import $importParameters "${moduleID}" "${azureResourceID}"; then
 								import_return_value=$?
 							fi
 						fi
@@ -1121,7 +1124,7 @@ function ImportAndReRunApply {
 
 				rm "$fileName"
 				# shellcheck disable=SC2086
-				if terraform -chdir="${terraform_module_directory}" plan -input=false $importParameters; then
+				if $TOFU_CMD -chdir="${terraform_module_directory}" plan -input=false $importParameters; then
 					import_return_value=$?
 					print_banner "Installer" "Terraform plan succeeded" "success"
 				else
@@ -1135,7 +1138,7 @@ function ImportAndReRunApply {
 					error_count=0
 
 					# shellcheck disable=SC2086
-					if terraform -chdir="${terraform_module_directory}" apply -no-color -compact-warnings -json -input=false --auto-approve $applyParameters | tee "$fileName"; then
+					if $TOFU_CMD -chdir="${terraform_module_directory}" apply -no-color -compact-warnings -json -input=false --auto-approve $applyParameters | tee "$fileName"; then
 						import_return_value=${PIPESTATUS[0]}
 					else
 						import_return_value=${PIPESTATUS[0]}
@@ -1394,7 +1397,7 @@ function get_terraform_output() {
 
 	# Try to get the output, suppress warnings
 	local value
-	if value=$(terraform -chdir="$terraform_module_directory" output -no-color -raw "$output_name" 2>/dev/null); then
+	if value=$($TOFU_CMD -chdir="$terraform_module_directory" output -no-color -raw "$output_name" 2>/dev/null); then
 		echo "$value"
 	else
 		echo "$default_value"
