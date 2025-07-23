@@ -18,6 +18,9 @@ source "${script_directory}/deploy_utils.sh"
 #helper files
 source "${script_directory}/helpers/script_helpers.sh"
 
+# Infrastructure as Code tool selection (terraform or tofu)
+TOFU_CMD="${TOFU_CMD:-tofu}"
+
 function showhelp {
 	echo ""
 	echo "##################################################################################################################"
@@ -330,9 +333,9 @@ module_dir=$DEPLOYMENT_REPO_PATH/deploy/terraform/run/${type}
 export TF_DATA_DIR="${directory}"
 
 if [ -f .terraform/terraform.tfstate ]; then
-	terraform init
+	$TOFU_CMD init
 else
-	terraform -chdir="${module_dir}" init \
+	$TOFU_CMD -chdir="${module_dir}" init \
 		-backend-config "subscription_id=${subscription_id}" \
 		-backend-config "resource_group_name=${resource_group_name}" \
 		-backend-config "storage_account_name=${storage_account_name}" \
@@ -373,7 +376,7 @@ fi
 
 echo "Looking for resource:" "${moduleID}"
 
-terraform -chdir="${module_dir}" state list >resources.lst
+$TOFU_CMD -chdir="${module_dir}" state list >resources.lst
 
 if [ "${operation}" == "list" ]; then
 	echo "#########################################################################################"
@@ -401,7 +404,7 @@ if [ "${operation}" == "import" ] || [ "${operation}" == "remove" ]; then
 		echo "#                                                                                       #"
 		echo "#########################################################################################"
 		echo ""
-		terraform -chdir="${module_dir}" state rm "${moduleID}"
+		$TOFU_CMD -chdir="${module_dir}" state rm "${moduleID}"
 		return_value=$?
 		if [ 0 != $return_value ]; then
 			echo ""
@@ -423,7 +426,7 @@ if [ "${operation}" == "import" ]; then
 
 	tfstate_parameter=" -var tfstate_resource_id=${tfstate_resource_id}"
 
-	terraform -chdir="${module_dir}" import -var-file $(pwd)/"${parameter_file}" "${tfstate_parameter}" "${workload_zone_name_parameter}" "${moduleID}" "${resourceID}"
+	$TOFU_CMD -chdir="${module_dir}" import -var-file "$(pwd)/${parameter_file}" "${tfstate_parameter}" "${workload_zone_name_parameter}" "${moduleID}" "${resourceID}"
 
 	return_value=$?
 	if [ 0 != $return_value ]; then
