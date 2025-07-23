@@ -198,7 +198,10 @@ if [ "$FORCE_RESET" == True ]; then
 
 	if [ -n "${tfstate_resource_id}" ]; then
 		this_ip=$(curl -s ipinfo.io/ip) >/dev/null 2>&1
+		echo "Adding Azure DevOps agent IP ($this_ip) to storage account network rules"
 		az storage account network-rule add --account-name "$TERRAFORM_REMOTE_STORAGE_ACCOUNT_NAME" --resource-group "$TERRAFORM_REMOTE_STORAGE_RESOURCE_GROUP_NAME" --ip-address "${this_ip}" --only-show-errors --output none
+		export TF_VAR_Agent_IP="$this_ip"
+		export TF_VAR_add_Agent_IP=true
 	fi
 
 	REINSTALL_ACCOUNTNAME=$TERRAFORM_REMOTE_STORAGE_ACCOUNT_NAME

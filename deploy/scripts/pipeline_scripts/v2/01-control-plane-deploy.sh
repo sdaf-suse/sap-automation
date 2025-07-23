@@ -199,7 +199,10 @@ if [ -n "${key_vault}" ]; then
 	if [ -n "${key_vault_id}" ]; then
 		if [ "azure pipelines" = "$THIS_AGENT" ]; then
 			this_ip=$(curl -s ipinfo.io/ip) >/dev/null 2>&1
+			echo "Adding Azure DevOps agent IP ($this_ip) to Key Vault network rules"
 			az keyvault network-rule add --name "${key_vault}" --ip-address "${this_ip}" --only-show-errors --output none
+			export TF_VAR_Agent_IP="$this_ip"
+			export TF_VAR_add_Agent_IP=true
 		fi
 	fi
 fi
@@ -393,6 +396,13 @@ if [ 0 -eq "$return_code" ]; then
 	fi
 
 fi
+
+# Cleanup: Remove agent IP from Key Vault network rules after deployment
+if [ -n "${key_vault}" ] && [ -n "${this_ip}" ]; then
+	echo "Removing Azure DevOps agent IP ($this_ip) from Key Vault network rules"
+	az keyvault network-rule remove --name "${key_vault}" --ip-address "${this_ip}" --only-show-errors --output none || true
+fi
+
 print_banner "$banner_title" "Exiting $SCRIPT_NAME" "info"
 
 exit $return_code

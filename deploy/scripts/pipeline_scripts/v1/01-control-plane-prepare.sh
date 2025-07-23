@@ -218,15 +218,20 @@ if [ -n "$DEPLOYER_KEYVAULT" ]; then
 			key_vault_id=$(az resource list --name "${DEPLOYER_KEYVAULT}" --resource-type Microsoft.KeyVault/vaults --query "[].id | [0]" --subscription "$ARM_SUBSCRIPTION_ID" --output tsv)
 			if [ -n "${key_vault_id}" ]; then
 				export TF_VAR_deployer_kv_user_arm_id=${key_vault_id}
-				this_ip=$(curl -s ipinfo.io/ip) >/dev/null 2>&1
+				this_ip=$(curl -s ipinfo.io/ip)
+				echo "Adding Azure DevOps agent IP ($this_ip) to Key Vault network rules"
 				az keyvault network-rule add --name "${DEPLOYER_KEYVAULT}" --ip-address "${this_ip}" --subscription "$ARM_SUBSCRIPTION_ID" --only-show-errors --output none
+				export TF_VAR_Agent_IP="$this_ip"
+				export TF_VAR_add_Agent_IP=true
 			fi
 		fi
 	else
 		export TF_VAR_deployer_kv_user_arm_id=${key_vault_id}
-		this_ip=$(curl -s ipinfo.io/ip) >/dev/null 2>&1
+		this_ip=$(curl -s ipinfo.io/ip)
+		echo "Adding Azure DevOps agent IP ($this_ip) to Key Vault network rules"
 		az keyvault network-rule add --name "${DEPLOYER_KEYVAULT}" --ip-address "${this_ip}" --subscription "$ARM_SUBSCRIPTION_ID" --only-show-errors --output none
-
+		export TF_VAR_Agent_IP="$this_ip"
+		export TF_VAR_add_Agent_IP=true
 	fi
 else
 	echo "Deployer Key Vault:                  undefined"

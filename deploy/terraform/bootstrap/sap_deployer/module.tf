@@ -20,6 +20,7 @@ module "sap_deployer" {
                                                     module.sap_namegenerator.naming
                                                  )
   Agent_IP                                     = var.add_Agent_IP ? var.Agent_IP : ""
+  add_Agent_IP                                 = var.add_Agent_IP
   additional_network_id                        = var.additional_network_id
   additional_users_to_add_to_keyvault_policies = var.additional_users_to_add_to_keyvault_policies
   app_service                                  = local.app_service

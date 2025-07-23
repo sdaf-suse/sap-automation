@@ -102,6 +102,7 @@ variable "arm_client_id"               { description = "ARM client id" }
 #########################################################################################
 
 variable "Agent_IP"                    { description = "If provided, contains the IP address of the agent" }
+variable "add_Agent_IP"                { description = "Boolean flag to indicate if Agent IP should be added to network rules, enabling public access during deployment" }
 variable "spn_id"                      { description = "SPN ID to be used for the deployment" }
 
 
