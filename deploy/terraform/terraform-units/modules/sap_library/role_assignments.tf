@@ -31,18 +31,33 @@ resource "azurerm_role_assignment" "blob_msi" {
   principal_id                         = var.deployer_tfstate.deployer_msi_id
 }
 
+# Check if DNS role assignment already exists
+data "azurerm_role_assignment" "existing_dns_msi" {
+  provider             = azurerm.main
+  count                = var.infrastructure.assign_permissions && var.deployer.use ? (
+                           length(try(var.deployer_tfstate.deployer_msi_id, "")) > 0 ? 1 : 0
+                         ) : 0
+  scope                = var.infrastructure.resource_group.exists ? (
+                           data.azurerm_resource_group.library[0].id) : (
+                           azurerm_resource_group.library[0].id
+                         )
+  role_definition_name = "Private DNS Zone Contributor"
+  principal_id         = var.deployer_tfstate.deployer_msi_id
+}
+
 resource "azurerm_role_assignment" "dns_msi" {
-  provider                             = azurerm.main
-  count                                = var.infrastructure.assign_permissions && var.deployer.use ? (
-                                           length(try(var.deployer_tfstate.deployer_msi_id, "")) > 0 ? 1 : 0) : (
-                                           0
-                                           )
-  scope                                = var.infrastructure.resource_group.exists ? (
-                                                 data.azurerm_resource_group.library[0].id) : (
-                                                 azurerm_resource_group.library[0].id
-                                               )
-  role_definition_name                 = "Private DNS Zone Contributor"
-  principal_id                         = var.deployer_tfstate.deployer_msi_id
+  provider             = azurerm.main
+  count                = var.infrastructure.assign_permissions && var.deployer.use ? (
+                           length(try(var.deployer_tfstate.deployer_msi_id, "")) > 0 ? (
+                             length(try(data.azurerm_role_assignment.existing_dns_msi[0].id, "")) == 0 ? 1 : 0
+                           ) : 0
+                         ) : 0
+  scope                = var.infrastructure.resource_group.exists ? (
+                           data.azurerm_resource_group.library[0].id) : (
+                           azurerm_resource_group.library[0].id
+                         )
+  role_definition_name = "Private DNS Zone Contributor"
+  principal_id         = var.deployer_tfstate.deployer_msi_id
 }
 
 
