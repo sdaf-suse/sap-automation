@@ -15,6 +15,9 @@
 #   * Installs the specified version of terraform so that it
 #     is available for all users.
 #
+#   * Installs the specified version of opentofu so that it
+#     is available for all users.
+#
 #   * Installs the Azure CLI using the provided installer
 #     script, making it available for all users.
 #
@@ -68,10 +71,19 @@ if [ -z "${TF_VERSION}" ]; then
 	TF_VERSION="1.11.3"
 fi
 
+#
+# OpenTofu Version settings
+#
+
+if [ -z "${OPENTOFU_VERSION}" ]; then
+	OPENTOFU_VERSION="1.10.3"
+fi
+
 # Fail if attempting to access and unset variable or parameter
 set -o nounset
 
 tfversion=$TF_VERSION
+tofuversion=$OPENTOFU_VERSION
 
 #
 # Ansible Version settings
@@ -231,6 +243,32 @@ pkg_mgr_install() {
 }
 
 #
+# OpenTofu Installation Function
+#
+install_opentofu() {
+	echo "Installing OpenTofu version ${tofuversion}..."
+
+	# Create OpenTofu directories
+	sudo mkdir -p \
+		"${tofu_dir}" \
+		"${tofu_bin}"
+
+	# Download OpenTofu binary from GitHub releases
+	wget -nv -O /tmp/"${tofu_zip}" "https://github.com/opentofu/opentofu/releases/download/v${tofuversion}/${tofu_zip}"
+
+	# Extract to version-specific directory
+	sudo unzip -o /tmp/"${tofu_zip}" -d "${tofu_dir}"
+
+	# Create symlink for easy access
+	sudo ln -vfs "../$(basename "${tofu_dir}")/tofu" "${tofu_bin}/tofu"
+
+	# Remove the downloaded zip file
+	sudo rm /tmp/"${tofu_zip}"
+
+	echo "OpenTofu ${tofuversion} installation completed"
+}
+
+#
 # Directories and paths
 #
 
@@ -255,6 +293,12 @@ tf_base=/opt/terraform
 tf_dir="${tf_base}/terraform_${tfversion}"
 tf_bin="${tf_base}/bin"
 tf_zip="terraform_${tfversion}_linux_amd64.zip"
+
+# OpenTofu installation directories
+tofu_base=/opt/opentofu
+tofu_dir="${tofu_base}/opentofu_${tofuversion}"
+tofu_bin="${tofu_base}/bin"
+tofu_zip="tofu_${tofuversion}_linux_amd64.zip"
 
 #
 #Don't re-run the following if the script is already installed
@@ -453,6 +497,11 @@ sudo unzip -o /tmp/"${tf_zip}" -d "${tf_dir}"
 sudo ln -vfs "../$(basename "${tf_dir}")/terraform" "${tf_bin}/terraform"
 
 sudo rm /tmp/"${tf_zip}"
+
+#
+# Install OpenTofu for all users
+#
+install_opentofu
 
 # Uninstall Azure CLI - For some platforms
 case "$(get_distro_name)" in
@@ -676,7 +725,7 @@ set -o xtrace
 #
 echo '# Configure environment settings for deployer interactive sessions' | sudo tee /etc/profile.d/deploy_server.sh
 
-export PATH="${PATH}":"${ansible_bin}":"${tf_bin}":"${DOTNET_ROOT}"
+export PATH="${PATH}":"${ansible_bin}":"${tf_bin}":"${tofu_bin}":"${DOTNET_ROOT}"
 
 # Prepare Azure SAP Automated Deployment folder structure
 mkdir -p \
@@ -712,7 +761,7 @@ export ARM_USE_MSI=true
 #
 # Create /etc/profile.d script to setup environment for future interactive sessions
 #
-export PATH="${PATH}":"${ansible_bin}":"${tf_bin}":"${HOME}"/Azure_SAP_Automated_Deployment/sap-automation/deploy/scripts:"${HOME}"/Azure_SAP_Automated_Deployment/sap-automation/deploy/ansible
+export PATH="${PATH}":"${ansible_bin}":"${tf_bin}":"${tofu_bin}":"${HOME}"/Azure_SAP_Automated_Deployment/sap-automation/deploy/scripts:"${HOME}"/Azure_SAP_Automated_Deployment/sap-automation/deploy/ansible
 
 echo "# Configure environment settings for deployer interactive sessions" | tee -a /tmp/deploy_server.sh
 
@@ -730,7 +779,7 @@ if [ -f "$AGENT_DIR/.agent" ]; then
 	fi
 
 	echo "Azure DevOps Agent is configured."
-	echo export "PATH=${ansible_bin}:${tf_bin}:${PATH}" | tee -a /tmp/deploy_server.sh
+	echo export "PATH=${ansible_bin}:${tf_bin}:${tofu_bin}:${PATH}" | tee -a /tmp/deploy_server.sh
 
 	devops_extension_installed=$(az extension list --query "[?name=='azure-devops'].name | [0]")
 	if [ -z "$devops_extension_installed" ]; then
@@ -744,7 +793,7 @@ else
 	echo "export DEPLOYMENT_REPO_PATH=$HOME/Azure_SAP_Automated_Deployment/sap-automation" | tee -a /tmp/deploy_server.sh
 	echo "export CONFIG_REPO_PATH=$HOME/Azure_SAP_Automated_Deployment/WORKSPACES" | tee -a /tmp/deploy_server.sh
 
-	echo export "PATH=${ansible_bin}:${tf_bin}:${PATH}:${HOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/scripts:${HOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/ansible" | tee -a /tmp/deploy_server.sh
+	echo export "PATH=${ansible_bin}:${tf_bin}:${tofu_bin}:${PATH}:${HOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/scripts:${HOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/ansible" | tee -a /tmp/deploy_server.sh
 
 	# Set env for MSI
 	echo "export ARM_USE_MSI=true" | tee -a /tmp/deploy_server.sh
