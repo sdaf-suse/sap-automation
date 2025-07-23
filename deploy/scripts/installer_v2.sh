@@ -28,6 +28,9 @@ if [[ -f /etc/profile.d/deploy_server.sh ]]; then
 	export PATH=$path
 fi
 
+# Infrastructure as Code tool selection (terraform or tofu)
+TOFU_CMD="${TOFU_CMD:-tofu}"
+
 ###############################################################################
 # Function to show an error message and exit with a non-zero status           #
 # Arguments:                                                                  #
@@ -673,7 +676,7 @@ function sdaf_installer() {
 	if [ ! -f .terraform/terraform.tfstate ]; then
 		print_banner "$banner_title" "New deployment" "info"
 
-		if ! terraform -chdir="${terraform_module_directory}" init -upgrade=true -input=false \
+		if ! $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -input=false \
 			--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 			--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
 			--backend-config "storage_account_name=${terraform_storage_account_name}" \
@@ -695,7 +698,7 @@ function sdaf_installer() {
 
 				terraform_module_directory="${SAP_AUTOMATION_REPO_PATH}/deploy/terraform/bootstrap/${deployment_system}"/
 
-				if terraform -chdir="${terraform_module_directory}" init -migrate-state --backend-config "path=${param_dirname}/terraform.tfstate"; then
+				if $TOFU_CMD -chdir="${terraform_module_directory}" init -migrate-state --backend-config "path=${param_dirname}/terraform.tfstate"; then
 					return_value=$?
 					print_banner "$banner_title" "Terraform local init succeeded" "success"
 				else
@@ -707,7 +710,7 @@ function sdaf_installer() {
 
 			terraform_module_directory="${SAP_AUTOMATION_REPO_PATH}/deploy/terraform/run/${deployment_system}"/
 
-			if terraform -chdir="${terraform_module_directory}" init -force-copy \
+			if $TOFU_CMD -chdir="${terraform_module_directory}" init -force-copy \
 				--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 				--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
 				--backend-config "storage_account_name=${terraform_storage_account_name}" \
@@ -726,7 +729,7 @@ function sdaf_installer() {
 			echo "Terraform state:                     remote"
 			print_banner "$banner_title" "The system has already been deployed and the state file is in Azure" "info"
 
-			if terraform -chdir="${terraform_module_directory}" init -upgrade -force-copy -migrate-state \
+			if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade -force-copy -migrate-state \
 				--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 				--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
 				--backend-config "storage_account_name=${terraform_storage_account_name}" \
@@ -743,7 +746,7 @@ function sdaf_installer() {
 	fi
 
 	if [ 1 -eq "$new_deployment" ]; then
-		if terraform -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+		if $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 			print_banner "$banner_title" "New deployment" "info"
 			deployment_parameter=" -var deployment=new "
 			new_deployment=0
@@ -755,7 +758,7 @@ function sdaf_installer() {
 	fi
 
 	if [ 1 -eq $new_deployment ]; then
-		deployed_using_version=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw automation_version | tr -d \")
+		deployed_using_version=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw automation_version | tr -d \")
 		if [ -z "${deployed_using_version}" ]; then
 			print_banner "$banner_title" "The environment was deployed using an older version of the Terraform templates" "error" "Please inspect the output of Terraform plan carefully!"
 
@@ -789,7 +792,7 @@ function sdaf_installer() {
 	allParameters=$(printf " -var-file=%s %s %s %s %s" "${var_file}" "${extra_vars}" "${deployment_parameter}" "${version_parameter}" "${credentialVariable}")
 	apply_needed=0
 
-	if terraform -chdir="$terraform_module_directory" plan $allParameters -input=false -detailed-exitcode -compact-warnings -no-color | tee plan_output.log; then
+	if $TOFU_CMD -chdir="$terraform_module_directory" plan $allParameters -input=false -detailed-exitcode -compact-warnings -no-color | tee plan_output.log; then
 		return_value=${PIPESTATUS[0]}
 		print_banner "$banner_title" "Terraform plan succeeded." "success" "Terraform plan return code: $return_value"
 	else
@@ -809,8 +812,8 @@ function sdaf_installer() {
 	if [ "${deployment_system}" == sap_deployer ]; then
 		state_path="DEPLOYER"
 
-		if ! terraform -chdir="${terraform_module_directory}" output | grep "No outputs"; then
-			DEPLOYER_KEYVAULT=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
+		if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+			DEPLOYER_KEYVAULT=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
 			if [ -n "$DEPLOYER_KEYVAULT" ]; then
 				save_config_var "DEPLOYER_KEYVAULT" "${system_config_information}"
 			fi
@@ -828,8 +831,8 @@ function sdaf_installer() {
 
 	if [ "${deployment_system}" == sap_library ]; then
 		state_path="LIBRARY"
-		if ! terraform -chdir="${terraform_module_directory}" output | grep "No outputs"; then
-			tfstate_resource_id=$(terraform -chdir="${terraform_module_directory}" output tfstate_resource_id | tr -d \")
+		if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+			tfstate_resource_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output tfstate_resource_id | tr -d \")
 			save_config_vars "${system_config_information}" \
 				tfstate_resource_id
 		fi
@@ -941,7 +944,7 @@ function sdaf_installer() {
 
 		if [ -n "${approve}" ]; then
 			# shellcheck disable=SC2086
-			if terraform -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -no-color -compact-warnings -json -input=false $allParameters | tee apply_output.json; then
+			if $TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -no-color -compact-warnings -json -input=false $allParameters | tee apply_output.json; then
 				return_value=${PIPESTATUS[0]}
 			else
 				return_value=${PIPESTATUS[0]}
@@ -949,7 +952,7 @@ function sdaf_installer() {
 
 		else
 			# shellcheck disable=SC2086
-			if terraform -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" $allParameters; then
+			if $TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" $allParameters; then
 				return_value=$?
 			else
 				return_value=$?
@@ -1041,7 +1044,7 @@ function sdaf_installer() {
 
 	if [ ${DEBUG:-False} == True ]; then
 		echo "Terraform state file:"
-		terraform -chdir="${terraform_module_directory}" output -json
+		$TOFU_CMD -chdir="${terraform_module_directory}" output -json
 	fi
 
 	if [ 0 -ne $return_value ]; then
@@ -1052,35 +1055,35 @@ function sdaf_installer() {
 
 	if [ "${deployment_system}" == sap_deployer ]; then
 
-		# terraform -chdir="${terraform_module_directory}"  output
-		if ! terraform -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+		# $TOFU_CMD -chdir="${terraform_module_directory}"  output
+		if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 
-			deployer_random_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+			deployer_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 			if [ -n "${deployer_random_id}" ]; then
 				save_config_var "deployer_random_id" "${system_config_information}"
 				custom_random_id="${deployer_random_id:0:3}"
 				sed -i -e /"custom_random_id"/d "${parameterFilename}"
 				printf "# The parameter 'custom_random_id' can be used to control the random 3 digits at the end of the storage accounts and key vaults\ncustom_random_id=\"%s\"\n" "${custom_random_id}" >>"${var_file}"
 			fi
-			DEPLOYER_KEYVAULT=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
+			DEPLOYER_KEYVAULT=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
 			if [ -n "${DEPLOYER_KEYVAULT}" ]; then
 				save_config_var "DEPLOYER_KEYVAULT" "${system_config_information}"
 				export DEPLOYER_KEYVAULT
 			fi
 
-			APPLICATION_CONFIGURATION_ID=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw deployer_app_config_id | tr -d \")
+			APPLICATION_CONFIGURATION_ID=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_app_config_id | tr -d \")
 			if [ -n "${APPLICATION_CONFIGURATION_ID}" ]; then
 				save_config_var "APPLICATION_CONFIGURATION_ID" "${system_config_information}"
 				export APPLICATION_CONFIGURATION_ID
 			fi
 
-			APP_SERVICE_NAME=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw webapp_url_base | tr -d \")
+			APP_SERVICE_NAME=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw webapp_url_base | tr -d \")
 			if [ -n "${APP_SERVICE_NAME}" ]; then
 				save_config_var "APP_SERVICE_NAME" "${system_config_information}"
 				export APP_SERVICE_NAME
 			fi
 
-			HAS_WEBAPP=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw app_service_deployment | tr -d \")
+			HAS_WEBAPP=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw app_service_deployment | tr -d \")
 			if [ -n "${HAS_WEBAPP}" ]; then
 				save_config_var "HAS_WEBAPP" "${system_config_information}"
 				export HAS_WEBAPP
@@ -1088,13 +1091,13 @@ function sdaf_installer() {
 
 		fi
 
-		DEPLOYER_KEYVAULT=$(terraform -chdir="${terraform_module_directory}" output -no-color deployer_kv_user_name | tr -d \")
+		DEPLOYER_KEYVAULT=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color deployer_kv_user_name | tr -d \")
 
-		app_config_id=$(terraform -chdir="${terraform_module_directory}" output -no-color deployer_app_config_id | tr -d \")
+		app_config_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color deployer_app_config_id | tr -d \")
 
-		app_service_name=$(terraform -chdir="${terraform_module_directory}" output -no-color webapp_url_base | tr -d \")
+		app_service_name=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color webapp_url_base | tr -d \")
 
-		app_service_deployment=$(terraform -chdir="${terraform_module_directory}" output -no-color app_service_deployment | tr -d \")
+		app_service_deployment=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color app_service_deployment | tr -d \")
 
 		echo ""
 		if [ 1 == $called_from_ado ]; then
@@ -1137,9 +1140,9 @@ function sdaf_installer() {
 	fi
 
 	if [ "${deployment_system}" == sap_library ]; then
-		terraform_storage_account_name=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
+		terraform_storage_account_name=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
 
-		library_random_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+		library_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 		if [ -n "${library_random_id}" ]; then
 			save_config_var "library_random_id" "${system_config_information}"
 			custom_random_id="${library_random_id:0:3}"

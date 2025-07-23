@@ -29,6 +29,9 @@ if [[ "${DEBUG:-false}" == 'true' ]]; then
 	printenv | sort
 fi
 
+# Infrastructure as Code tool selection (terraform or tofu)
+TOFU_CMD="${TOFU_CMD:-tofu}"
+
 # Constants
 script_directory="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 readonly script_directory
@@ -234,60 +237,60 @@ function sdaf_remove_deployer() {
 
 	current_directory=$(pwd)
 
-	terraform -chdir="${terraform_module_directory}" init -reconfigure -backend-config "path=${current_directory}/terraform.tfstate"
+	$TOFU_CMD -chdir="${terraform_module_directory}" init -reconfigure -backend-config "path=${current_directory}/terraform.tfstate"
 	extra_vars=""
 
-	# if terraform -chdir="${terraform_module_directory}" state list; then
+	# if $TOFU_CMD -chdir="${terraform_module_directory}" state list; then
 
 	# 	moduleID="module.sap_deployer.azurerm_app_configuration_key.deployer_state_file_name"
-	# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-	# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+	# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+	# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 	# 			echo "Setting 'deployer_state_file_name' removed from state"
 	# 		fi
 	# 	fi
 
 	# 	moduleID="module.sap_deployer.azurerm_app_configuration_key.deployer_keyvault_name"
-	# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-	# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+	# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+	# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 	# 			echo "Setting 'deployer_keyvault_name' removed from state"
 	# 		fi
 	# 	fi
 
 	# 	moduleID="module.sap_deployer.azurerm_app_configuration_key.deployer_keyvault_id"
-	# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-	# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+	# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+	# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 	# 			echo "Setting 'deployer_keyvault_id' removed from state"
 	# 		fi
 	# 	fi
 	# 	moduleID="module.sap_deployer.azurerm_app_configuration_key.deployer_resourcegroup_name"
-	# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-	# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+	# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+	# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 	# 			echo "Setting 'deployer_resourcegroup_name' removed from state"
 	# 		fi
 	# 	fi
 	# 	moduleID="module.sap_deployer.azurerm_app_configuration_key.deployer_subscription_id"
-	# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-	# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+	# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+	# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 	# 			echo "Setting 'deployer_subscription_id' removed from state"
 	# 		fi
 	# 	fi
 
 	# 	moduleID="module.sap_deployer.azurerm_app_configuration_key.web_application_resource_id"
-	# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-	# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+	# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+	# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 	# 			echo "Setting 'web_application_resource_id' removed from state"
 	# 		fi
 	# 	fi
 
 	# 	moduleID="module.sap_deployer.azurerm_app_configuration_key.deployer_msi_id"
-	# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-	# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+	# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+	# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 	# 			echo "Setting 'deployer_msi_id' removed from state"
 	# 		fi
 	# 	fi
 	# 	moduleID="module.sap_deployer.azurerm_app_configuration_key.web_application_identity_id"
-	# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-	# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+	# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+	# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 	# 			echo "Setting 'deployer_msi_id' removed from state"
 	# 		fi
 	# 	fi
@@ -307,7 +310,7 @@ function sdaf_remove_deployer() {
 		parallelism=$TF_PARALLELLISM
 	fi
 
-	if terraform -chdir="${terraform_module_directory}" destroy "${approve}" -lock=false -parallelism="${parallelism}" -json -var-file="${var_file}" "$extra_vars" | tee destroy_output.json; then
+	if $TOFU_CMD -chdir="${terraform_module_directory}" destroy "${approve}" -lock=false -parallelism="${parallelism}" -json -var-file="${var_file}" "$extra_vars" | tee destroy_output.json; then
 		return_value=${PIPESTATUS[0]}
 		print_banner "Remover" "Terraform destroy succeeded" "success"
 	else

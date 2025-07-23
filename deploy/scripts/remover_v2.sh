@@ -30,6 +30,9 @@ if [[ "${DEBUG:-false}" == 'true' ]]; then
 	printenv | sort
 fi
 
+# Infrastructure as Code tool selection (terraform or tofu)
+TOFU_CMD="${TOFU_CMD:-tofu}"
+
 # Constants
 script_directory="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 readonly script_directory
@@ -548,7 +551,7 @@ function sdaf_remover() {
 
 		terraform_module_directory="${SAP_AUTOMATION_REPO_PATH}/deploy/terraform/run/${deployment_system}"/
 
-		if terraform -chdir="${terraform_module_directory}" init -force-copy \
+		if $TOFU_CMD -chdir="${terraform_module_directory}" init -force-copy \
 			--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 			--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
 			--backend-config "storage_account_name=${terraform_storage_account_name}" \
@@ -566,7 +569,7 @@ function sdaf_remover() {
 		echo "Terraform state:                     remote"
 		print_banner "$banner_title - $deployment_system" "The system has already been deployed and the state file is in Azure" "info"
 
-		if ! terraform -chdir="${terraform_module_directory}" init -force-copy -upgrade=true \
+		if ! $TOFU_CMD -chdir="${terraform_module_directory}" init -force-copy -upgrade=true \
 			--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 			--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
 			--backend-config "storage_account_name=${terraform_storage_account_name}" \
@@ -584,68 +587,68 @@ function sdaf_remover() {
 	print_banner "$banner_title - $deployment_system" "Running Terraform destroy" "info"
 
 	if [ "$deployment_system" == "sap_deployer" ]; then
-		terraform -chdir="${terraform_module_directory}" destroy -var-file="${var_file}"
+		$TOFU_CMD -chdir="${terraform_module_directory}" destroy -var-file="${var_file}"
 
 	elif [ "$deployment_system" == "sap_library" ]; then
 		terraform_bootstrap_directory="${SAP_AUTOMATION_REPO_PATH}/deploy/terraform/bootstrap/${deployment_system}/"
-		terraform -chdir="${terraform_bootstrap_directory}" init -upgrade=true -force-copy
+		$TOFU_CMD -chdir="${terraform_bootstrap_directory}" init -upgrade=true -force-copy
 
-		terraform -chdir="${terraform_bootstrap_directory}" refresh -var-file="${var_file}"
+		$TOFU_CMD -chdir="${terraform_bootstrap_directory}" refresh -var-file="${var_file}"
 
-		terraform -chdir="${terraform_bootstrap_directory}" destroy -var-file="${var_file}" "${approve}" -var use_deployer=false
+		$TOFU_CMD -chdir="${terraform_bootstrap_directory}" destroy -var-file="${var_file}" "${approve}" -var use_deployer=false
 	elif [ "$deployment_system" == "sap_landscape" ]; then
 
 		allParameters=$(printf " -var-file=%s %s " "${var_file}" "${extra_vars}")
 
 		# echo "Listing the resources in the state file"
 
-		# if terraform -chdir="${terraform_module_directory}" state list; then
+		# if $TOFU_CMD -chdir="${terraform_module_directory}" state list; then
 
 		# 	moduleID="module.sap_landscape.azurerm_key_vault_secret.sid_ppk"
-		# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+		# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+		# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 		# 			echo "Secret 'sid_ppk' removed from state"
 		# 		fi
 		# 	fi
 
 		# 	moduleID="module.sap_landscape.azurerm_key_vault_secret.sid_pk"
-		# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+		# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+		# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 		# 			echo "Secret 'sid_pk' removed from state"
 		# 		fi
 		# 	fi
 
-		# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+		# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
 		# 		moduleID="module.sap_landscape.azurerm_key_vault_secret.sid_username"
-		# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+		# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 		# 			echo "Secret 'sid_username' removed from state"
 		# 		fi
 		# 	fi
 
 		# 	moduleID="module.sap_landscape.azurerm_key_vault_secret.sid_password"
-		# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+		# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+		# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 		# 			echo "Secret 'sid_password' removed from state"
 		# 		fi
 		# 	fi
 
 		# 	moduleID="module.sap_landscape.azurerm_key_vault_secret.witness_access_key"
-		# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+		# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+		# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 		# 			echo "Secret 'witness_access_key' removed from state"
 		# 		fi
 		# 	fi
 
 		# 	moduleID="module.sap_landscape.azurerm_key_vault_secret.deployer_keyvault_user_name"
-		# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+		# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+		# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 		# 			echo "Secret 'deployer_keyvault_user_name' removed from state"
 		# 		fi
 		# 	fi
 
 		# 	moduleID="module.sap_landscape.azurerm_key_vault_secret.witness_name"
-		# 	if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 		if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
+		# 	if $TOFU_CMD -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
+		# 		if $TOFU_CMD -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
 		# 			echo "Secret 'witness_name' removed from state"
 		# 		fi
 		# 	fi
@@ -653,7 +656,7 @@ function sdaf_remover() {
 
 		if [ -n "${approve}" ]; then
 			# shellcheck disable=SC2086
-			if terraform -chdir="${terraform_module_directory}" destroy $allParameters "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
+			if $TOFU_CMD -chdir="${terraform_module_directory}" destroy $allParameters "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
 				return_value=$?
 				print_banner "$banner_title - $deployment_system" "Terraform destroy succeeded" "success"
 			else
@@ -669,7 +672,7 @@ function sdaf_remover() {
 
 		else
 			# shellcheck disable=SC2086
-			if terraform -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
+			if $TOFU_CMD -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
 				print_banner "$banner_title - $deployment_system" "Terraform destroy succeeded" "success"
 				return_value=$?
 			else
@@ -683,7 +686,7 @@ function sdaf_remover() {
 
 		if [ -n "${approve}" ]; then
 			# shellcheck disable=SC2086
-			if terraform -chdir="${terraform_module_directory}" destroy $allParameters "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
+			if $TOFU_CMD -chdir="${terraform_module_directory}" destroy $allParameters "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
 				return_value=${PIPESTATUS[0]}
 				print_banner "$banner_title - $deployment_system" "Terraform destroy succeeded" "success"
 			else
@@ -692,7 +695,7 @@ function sdaf_remover() {
 			fi
 		else
 			# shellcheck disable=SC2086
-			if terraform -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
+			if $TOFU_CMD -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
 				return_value=$?
 				print_banner "$banner_title - $deployment_system" "Terraform destroy succeeded" "success"
 			else
