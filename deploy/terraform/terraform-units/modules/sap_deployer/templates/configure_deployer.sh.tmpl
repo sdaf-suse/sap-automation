@@ -70,7 +70,7 @@ ansible_version="${ansible_core_version}"
 #
 # OpenTofu Version settings
 #
-opentofu_version="${opentofu_version}"
+opentofu_version="$${opentofu_version:-1.10.3}"
 
 PAT="${pat}"
 DEVURL="${ado_repo}"
