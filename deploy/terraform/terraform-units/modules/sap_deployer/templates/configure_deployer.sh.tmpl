@@ -70,7 +70,7 @@ ansible_version="${ansible_core_version}"
 #
 # OpenTofu Version settings
 #
-opentofu_version="${opentofu_version:-1.10.3}"
+opentofu_version="${opentofu_version}"
 
 PAT="${pat}"
 DEVURL="${ado_repo}"
@@ -294,6 +294,7 @@ tf_bin="$${tf_base}/bin"
 tf_zip="terraform_$${terraform_version}_linux_amd64.zip"
 tf_cache="$${tf_base}/.terraform.d/plugin-cache"
 
+opentofu_version="$${opentofu_version:-1.10.3}"
 # OpenTofu installation directories
 tofu_base="/opt/opentofu"
 tofu_dir="$${tofu_base}/opentofu_$${opentofu_version}"
