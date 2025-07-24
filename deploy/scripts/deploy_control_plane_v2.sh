@@ -20,7 +20,7 @@ script_directory="$(dirname "${full_script_path}")"
 set -euo pipefail
 
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 # Enable debug mode if DEBUG is set to 'true'
 if [[ "${DEBUG:-false}" == 'true' ]]; then
@@ -327,16 +327,16 @@ function validate_keyvault_access {
 					echo "Terraform state:                     remote"
 
 					terraform_module_directory="$SAP_AUTOMATION_REPO_PATH"/deploy/terraform/run/sap_deployer/
-					$TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true
+					$IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true
 
-					keyvault=$($TOFU_CMD -chdir="${terraform_module_directory}" output deployer_kv_user_name | tr -d \")
+					keyvault=$($IAC_TOOL -chdir="${terraform_module_directory}" output deployer_kv_user_name | tr -d \")
 					save_config_var "keyvault" "${deployer_config_information}"
 				else
 					echo "Terraform state:                     local"
 					terraform_module_directory="$SAP_AUTOMATION_REPO_PATH"/deploy/terraform/bootstrap/sap_deployer/
-					$TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true
+					$IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true
 
-					keyvault=$($TOFU_CMD -chdir="${terraform_module_directory}" output deployer_kv_user_name | tr -d \")
+					keyvault=$($IAC_TOOL -chdir="${terraform_module_directory}" output deployer_kv_user_name | tr -d \")
 					save_config_var "keyvault" "${deployer_config_information}"
 				fi
 			else
@@ -437,15 +437,15 @@ function bootstrap_library {
 			exit 20
 		fi
 
-		terraform_storage_account_name=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
-		terraform_storage_account_subscription_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id | tr -d \")
+		terraform_storage_account_name=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
+		terraform_storage_account_subscription_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id | tr -d \")
 
 		if [ "${ado_flag}" != "--ado" ]; then
 			this_ip=$(curl -s ipinfo.io/ip) >/dev/null 2>&1
 			az storage account network-rule add --account-name "${terraform_storage_account_name}" --subscription "$terraform_storage_account_subscription_id" --ip-address "${this_ip}" --output none
 		fi
 
-		TF_VAR_sa_connection_string=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw sa_connection_string | tr -d \")
+		TF_VAR_sa_connection_string=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw sa_connection_string | tr -d \")
 		export TF_VAR_sa_connection_string
 
 		tfstate_resource_id=$(az resource list --name "$terraform_storage_account_name" --subscription "$terraform_storage_account_subscription_id" --resource-type Microsoft.Storage/storageAccounts --query "[].id | [0]" -o tsv)
@@ -703,12 +703,12 @@ function copy_files_to_public_deployer() {
 				remote_library_dir="/home/azureadm/Azure_SAP_Automated_Deployment/WORKSPACES/"$(dirname "$library_parameter_file")
 				remote_config_dir="$CONFIG_REPO_PATH/.sap_deployment_automation"
 
-				ssh -i "${temp_file}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 azureadm@"${deployer_public_ip_address}" "mkdir -p ${remote_deployer_dir}"/.$TOFU_CMD 2>/dev/null
+				ssh -i "${temp_file}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 azureadm@"${deployer_public_ip_address}" "mkdir -p ${remote_deployer_dir}"/.$IAC_TOOL 2>/dev/null
 				scp -i "${temp_file}" -q -o StrictHostKeyChecking=no -o ConnectTimeout=120 -p "$deployer_parameter_file" azureadm@"${deployer_public_ip_address}":"${remote_deployer_dir}"/. 2>/dev/null
 				scp -i "${temp_file}" -q -o StrictHostKeyChecking=no -o ConnectTimeout=120 -p "$(dirname "$deployer_parameter_file")"/.terraform/terraform.tfstate azureadm@"${deployer_public_ip_address}":"${remote_deployer_dir}"/.terraform/terraform.tfstate 2>/dev/null
 				scp -i "${temp_file}" -q -o StrictHostKeyChecking=no -o ConnectTimeout=120 -p "$(dirname "$deployer_parameter_file")"/terraform.tfstate azureadm@"${deployer_public_ip_address}":"${remote_deployer_dir}"/terraform.tfstate 2>/dev/null
 
-				ssh -i "${temp_file}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 azureadm@"${deployer_public_ip_address}" " mkdir -p ${remote_library_dir}"/.$TOFU_CMD 2>/dev/null
+				ssh -i "${temp_file}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 azureadm@"${deployer_public_ip_address}" " mkdir -p ${remote_library_dir}"/.$IAC_TOOL 2>/dev/null
 				scp -i "${temp_file}" -q -o StrictHostKeyChecking=no -o ConnectTimeout=120 -p "$(dirname "$deployer_parameter_file")"/.terraform/terraform.tfstate azureadm@"${deployer_public_ip_address}":"${remote_deployer_dir}"/. 2>/dev/null
 				scp -i "${temp_file}" -q -o StrictHostKeyChecking=no -o ConnectTimeout=120 -p "$library_parameter_file" azureadm@"${deployer_public_ip_address}":"$remote_library_dir"/. 2>/dev/null
 

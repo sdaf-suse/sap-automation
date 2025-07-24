@@ -17,7 +17,7 @@ full_script_path="$(realpath "${BASH_SOURCE[0]}")"
 script_directory="$(dirname "${full_script_path}")"
 
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 #call stack has full script name when using source
 source "${script_directory}/deploy_utils.sh"
@@ -163,7 +163,7 @@ fi
 
 current_directory=$(pwd)
 
-$TOFU_CMD -chdir="${terraform_module_directory}" init -reconfigure -backend-config "path=${current_directory}/terraform.tfstate"
+$IAC_TOOL -chdir="${terraform_module_directory}" init -reconfigure -backend-config "path=${current_directory}/terraform.tfstate"
 extra_vars=""
 
 if [ -f terraform.tfvars ]; then
@@ -185,7 +185,7 @@ if [[ -n "$TF_PARALLELLISM" ]]; then
 	parallelism="$TF_PARALLELLISM"
 fi
 
-if $TOFU_CMD -chdir="${terraform_module_directory}" destroy "${approve}" -lock=false -refresh=false -parallelism="${parallelism}" -json -var-file="${var_file}" "$extra_vars" | tee -a destroy_output.json; then
+if $IAC_TOOL -chdir="${terraform_module_directory}" destroy "${approve}" -lock=false -refresh=false -parallelism="${parallelism}" -json -var-file="${var_file}" "$extra_vars" | tee -a destroy_output.json; then
 	return_value=$?
 	echo ""
 	echo -e "${cyan}Terraform destroy:                     succeeded$reset_formatting"

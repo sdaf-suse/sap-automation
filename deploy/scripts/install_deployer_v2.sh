@@ -18,7 +18,7 @@ script_directory="$(dirname "${full_script_path}")"
 set -euo pipefail
 
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 # Enable debug mode if DEBUG is set to 'true'
 if [[ "${DEBUG:-false}" == 'true' ]]; then
@@ -270,14 +270,14 @@ function install_deployer() {
 
 	if [ ! -d .terraform/ ]; then
 		print_banner "$banner_title" "New deployment" "info"
-		$TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
+		$IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
 		return_value=$?
 	else
 		if [ -f .terraform/terraform.tfstate ]; then
 			azure_backend=$(grep "\"type\": \"azurerm\"" .terraform/terraform.tfstate || true)
 			if [ -n "$azure_backend" ]; then
 				print_banner "$banner_title" "State already migrated to Azure" "warning"
-				if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -migrate-state -force-copy -backend-config "path=${param_dirname}/terraform.tfstate"; then
+				if $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true -migrate-state -force-copy -backend-config "path=${param_dirname}/terraform.tfstate"; then
 					return_value=$?
 					print_banner "$banner_title" "Terraform init succeeded." "success"
 				else
@@ -289,7 +289,7 @@ function install_deployer() {
 
 			else
 				print_banner "$banner_title" "Running Terraform init" "info"
-				if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -migrate-state -backend-config "path=${param_dirname}/terraform.tfstate"; then
+				if $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true -migrate-state -backend-config "path=${param_dirname}/terraform.tfstate"; then
 					return_value=$?
 					print_banner "$banner_title" "Terraform init succeeded." "success"
 				else
@@ -301,7 +301,7 @@ function install_deployer() {
 			fi
 		fi
 		echo "Parameters:                          $allParameters"
-		$TOFU_CMD -chdir="${terraform_module_directory}" refresh $allParameters
+		$IAC_TOOL -chdir="${terraform_module_directory}" refresh $allParameters
 	fi
 
 	print_banner "$banner_title" "Running Terraform plan" "info"
@@ -314,7 +314,7 @@ function install_deployer() {
 
 	# shellcheck disable=SC2086
 
-	if ! $TOFU_CMD -chdir="$terraform_module_directory" plan -detailed-exitcode -input=false $allParameters | tee plan_output.log; then
+	if ! $IAC_TOOL -chdir="$terraform_module_directory" plan -detailed-exitcode -input=false $allParameters | tee plan_output.log; then
 		return_value=${PIPESTATUS[0]}
 	else
 		return_value=${PIPESTATUS[0]}
@@ -360,7 +360,7 @@ function install_deployer() {
 
 		if [ -n "${approve}" ]; then
 			# shellcheck disable=SC2086
-			if $TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" \
+			if $IAC_TOOL -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" \
 				$allParameters -no-color -compact-warnings -json -input=false --auto-approve | tee apply_output.json; then
 				return_value=${PIPESTATUS[0]}
 				print_banner "$banner_title" "Terraform apply succeeded" "success" "Terraform apply return code: $return_value"
@@ -370,7 +370,7 @@ function install_deployer() {
 			fi
 		else
 			# shellcheck disable=SC2086
-			if $TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" $allParameters; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" $allParameters; then
 				return_value=$?
 				print_banner "$banner_title" "Terraform apply succeeded" "success" "Terraform apply return code: $return_value"
 			else
@@ -441,7 +441,7 @@ function install_deployer() {
 		fi
 	fi
 
-	DEPLOYER_KEYVAULT=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
+	DEPLOYER_KEYVAULT=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
 	if [ -n "${DEPLOYER_KEYVAULT}" ]; then
 		printf -v val %-.20s "$DEPLOYER_KEYVAULT"
 		print_banner "$banner_title" "Keyvault to use for deployment credentials: $val" "info"
@@ -450,7 +450,7 @@ function install_deployer() {
 		export DEPLOYER_KEYVAULT
 	fi
 
-	APPLICATION_CONFIGURATION_ID=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_app_config_id | tr -d \")
+	APPLICATION_CONFIGURATION_ID=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw deployer_app_config_id | tr -d \")
 	if [ -n "${APPLICATION_CONFIGURATION_ID}" ]; then
 		save_config_var "APPLICATION_CONFIGURATION_ID" "${deployer_config_information}"
 		export APPLICATION_CONFIGURATION_ID
@@ -462,7 +462,7 @@ function install_deployer() {
 		export APPLICATION_CONFIGURATION_NAME
 	fi
 
-	APP_SERVICE_NAME=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw webapp_url_base | tr -d \")
+	APP_SERVICE_NAME=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw webapp_url_base | tr -d \")
 	if [ -n "${APP_SERVICE_NAME}" ]; then
 		printf -v val %-.20s "$DEPLOYER_KEYVAULT"
 		print_banner "$banner_title" "Application Configuration: $val" "info"
@@ -470,13 +470,13 @@ function install_deployer() {
 		export APP_SERVICE_NAME
 	fi
 
-	HAS_WEBAPP=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw app_service_deployment | tr -d \")
+	HAS_WEBAPP=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw app_service_deployment | tr -d \")
 	if [ -n "${HAS_WEBAPP}" ]; then
 		save_config_var "HAS_WEBAPP" "${deployer_config_information}"
 		export HAS_WEBAPP
 	fi
 
-	deployer_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+	deployer_random_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 	if [ -n "${deployer_random_id}" ]; then
 		custom_random_id="${deployer_random_id:0:3}"
 		sed -i -e /"custom_random_id"/d "${var_file}"

@@ -23,7 +23,7 @@ source "${script_directory}/deploy_utils.sh"
 source "${script_directory}/helpers/script_helpers.sh"
 
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 if [ "$DEBUG" = True ]; then
 	set -x
@@ -386,7 +386,7 @@ if [ -f .terraform/terraform.tfstate ]; then
 
 	azure_backend=$(grep "\"type\": \"azurerm\"" .terraform/terraform.tfstate || true)
 	if [ -n "${azure_backend}" ]; then
-		if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true; then
+		if $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true; then
 			echo ""
 			echo -e "${cyan}Terraform init:                        succeeded$reset_formatting"
 			echo ""
@@ -401,7 +401,7 @@ if [ -f .terraform/terraform.tfstate ]; then
 		REMOTE_STATE_SA=$(grep -m1 "storage_account_name" "${param_dirname}/.terraform/terraform.tfstate" | cut -d ':' -f2 | tr -d ' ",\r' | xargs || true)
 		REMOTE_STATE_RG=$(grep -m1 "resource_group_name" "${param_dirname}/.terraform/terraform.tfstate" | cut -d ':' -f2 | tr -d ' ",\r' | xargs || true)
 
-		if $TOFU_CMD -chdir="${terraform_module_directory}" init -reconfigure \
+		if $IAC_TOOL -chdir="${terraform_module_directory}" init -reconfigure \
 			--backend-config "subscription_id=${STATE_SUBSCRIPTION}" \
 			--backend-config "resource_group_name=${REMOTE_STATE_RG}" \
 			--backend-config "storage_account_name=${REMOTE_STATE_SA}" \
@@ -418,7 +418,7 @@ if [ -f .terraform/terraform.tfstate ]; then
 		fi
 	fi
 else
-	if $TOFU_CMD -chdir="${terraform_module_directory}" init -reconfigure \
+	if $IAC_TOOL -chdir="${terraform_module_directory}" init -reconfigure \
 		--backend-config "subscription_id=${STATE_SUBSCRIPTION}" \
 		--backend-config "resource_group_name=${REMOTE_STATE_RG}" \
 		--backend-config "storage_account_name=${REMOTE_STATE_SA}" \
@@ -438,9 +438,9 @@ fi
 tfstate_resource_id=$(az storage account show --name "${REMOTE_STATE_SA}" --query id --subscription "${STATE_SUBSCRIPTION}" --out tsv)
 export TF_VAR_tfstate_resource_id="${tfstate_resource_id}"
 
-created_resource_group_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_id | tr -d \")
+created_resource_group_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_id | tr -d \")
 created_resource_group_id_length="${#created_resource_group_id}"
-created_resource_group_subscription_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id | tr -d \")
+created_resource_group_subscription_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id | tr -d \")
 created_resource_group_subscription_id_length="${#created_resource_group_subscription_id}"
 
 if [ "${created_resource_group_id_length}" -eq 0 ] && [ "${created_resource_group_subscription_id_length}" -eq 0 ]; then
@@ -459,11 +459,11 @@ if [ "$resource_group_exist" ]; then
 	echo ""
 
 	if [ "$deployment_system" == "sap_deployer" ]; then
-		$TOFU_CMD -chdir="${terraform_bootstrap_directory}" refresh -var-file="${var_file}" \
+		$IAC_TOOL -chdir="${terraform_bootstrap_directory}" refresh -var-file="${var_file}" \
 			"$deployer_tfstate_key_parameter"
 
 		echo -e "#$cyan processing $deployment_system removal as defined in $parameterfile_name $reset_formatting"
-		$TOFU_CMD -chdir="${terraform_module_directory}" destroy -refresh=false -var-file="${var_file}" \
+		$IAC_TOOL -chdir="${terraform_module_directory}" destroy -refresh=false -var-file="${var_file}" \
 			"$deployer_tfstate_key_parameter"
 
 	elif [ "$deployment_system" == "sap_library" ]; then
@@ -480,12 +480,12 @@ if [ "$resource_group_exist" ]; then
 			echo ""
 			exit 66 #cannot open input file/folder
 		fi
-		$TOFU_CMD -chdir="${terraform_bootstrap_directory}" init -upgrade=true -force-copy
+		$IAC_TOOL -chdir="${terraform_bootstrap_directory}" init -upgrade=true -force-copy
 
-		$TOFU_CMD -chdir="${terraform_bootstrap_directory}" refresh -var-file="${var_file}" \
+		$IAC_TOOL -chdir="${terraform_bootstrap_directory}" refresh -var-file="${var_file}" \
 			"$deployer_tfstate_key_parameter"
 
-		$TOFU_CMD -chdir="${terraform_bootstrap_directory}" destroy -refresh=false -var-file="${var_file}" "${approve}" -var use_deployer=false \
+		$IAC_TOOL -chdir="${terraform_bootstrap_directory}" destroy -refresh=false -var-file="${var_file}" "${approve}" -var use_deployer=false \
 			"$deployer_tfstate_key_parameter"
 	elif [ "$deployment_system" == "sap_landscape" ]; then
 
@@ -557,7 +557,7 @@ if [ "$resource_group_exist" ]; then
 		# fi
 		if [ -n "${approve}" ]; then
 			# shellcheck disable=SC2086
-			if $TOFU_CMD -chdir="${terraform_module_directory}" destroy $allParameters "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" destroy $allParameters "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
 				return_value=$?
 			else
 				return_value=${PIPESTATUS[0]}
@@ -571,7 +571,7 @@ if [ "$resource_group_exist" ]; then
 
 		else
 			# shellcheck disable=SC2086
-			if $TOFU_CMD -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
 				return_value=$?
 			else
 				return_value=$?
@@ -597,7 +597,7 @@ if [ "$resource_group_exist" ]; then
 
 		if [ -n "${approve}" ]; then
 			# shellcheck disable=SC2086
-			if $TOFU_CMD -chdir="${terraform_module_directory}" destroy $allParameters "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" destroy $allParameters "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
 				return_value=$?
 				echo ""
 				echo -e "${cyan}Terraform destroy:                     succeeded$reset_formatting"
@@ -611,7 +611,7 @@ if [ "$resource_group_exist" ]; then
 			fi
 		else
 			# shellcheck disable=SC2086
-			if $TOFU_CMD -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" destroy $allParameters -parallelism="$parallelism"; then
 				return_value=$?
 				echo ""
 				echo -e "${cyan}Terraform destroy:                     succeeded$reset_formatting"

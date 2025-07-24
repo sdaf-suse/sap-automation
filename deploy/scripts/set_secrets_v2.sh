@@ -10,7 +10,7 @@ full_script_path="$(realpath "${BASH_SOURCE[0]}")"
 script_directory="$(dirname "${full_script_path}")"
 SCRIPT_NAME="$(basename "$0")"
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 if printenv DEBUG; then
 	if [ $DEBUG = True ]; then

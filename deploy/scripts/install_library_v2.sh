@@ -15,7 +15,7 @@ script_directory="$(dirname "${full_script_path}")"
 set -euo pipefail
 
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 # Enable debug mode if DEBUG is set to 'true'
 if [[ "${DEBUG:-false}" == 'true' ]]; then
@@ -361,7 +361,7 @@ function install_library() {
 
 	if [ ! -d ./.terraform/ ]; then
 		print_banner "$banner_title" "New Deployment" "info"
-		$TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
+		$IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"
 		sed -i /REMOTE_STATE_RG/d "${library_config_information}"
 		sed -i /REMOTE_STATE_SA/d "${library_config_information}"
 		sed -i /tfstate_resource_id/d "${library_config_information}"
@@ -391,7 +391,7 @@ function install_library() {
 
 					terraform_module_directory="${SAP_AUTOMATION_REPO_PATH}/deploy/terraform/run/sap_library"/
 
-					if $TOFU_CMD -chdir="${terraform_module_directory}" init \
+					if $IAC_TOOL -chdir="${terraform_module_directory}" init \
 						--backend-config "subscription_id=$REINSTALL_SUBSCRIPTION" \
 						--backend-config "resource_group_name=$REINSTALL_RESOURCE_GROUP" \
 						--backend-config "storage_account_name=$REINSTALL_ACCOUNTNAME" \
@@ -399,14 +399,14 @@ function install_library() {
 						--backend-config "key=${key}.terraform.tfstate"; then
 						print_banner "$banner_title" "Terraform init succeeded" "success"
 
-						$TOFU_CMD -chdir="${terraform_module_directory}" refresh -var-file="${var_file}" -input=false \
+						$IAC_TOOL -chdir="${terraform_module_directory}" refresh -var-file="${var_file}" -input=false \
 							-var deployer_statefile_foldername="${deployer_statefile_foldername}"
 					else
 						print_banner "$banner_title" "Terraform init against remote state failed" "error"
 						return 10
 					fi
 				else
-					if $TOFU_CMD -chdir="${terraform_module_directory}" init -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
+					if $IAC_TOOL -chdir="${terraform_module_directory}" init -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
 						print_banner "$banner_title" "Terraform init succeeded" "success"
 					else
 						print_banner "$banner_title" "Terraform init failed" "error"
@@ -414,7 +414,7 @@ function install_library() {
 					fi
 				fi
 			else
-				if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
+				if $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
 					print_banner "$banner_title" "Terraform init succeeded" "success"
 				else
 					print_banner "$banner_title" "Terraform init failed" "error"
@@ -424,7 +424,7 @@ function install_library() {
 			fi
 
 		else
-			if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true -backend-config "path=${param_dirname}/terraform.tfstate"; then
 				print_banner "$banner_title" "Terraform init succeeded" "success"
 			else
 				print_banner "$banner_title" "Terraform init failed" "error"
@@ -439,7 +439,7 @@ function install_library() {
 
 	if [ -n "${deployer_statefile_foldername}" ]; then
 		echo "Deployer folder specified:           ${deployer_statefile_foldername}"
-		$TOFU_CMD -chdir="${terraform_module_directory}" plan -no-color -detailed-exitcode \
+		$IAC_TOOL -chdir="${terraform_module_directory}" plan -no-color -detailed-exitcode \
 			-var-file="${var_file}" -input=false \
 			-var deployer_statefile_foldername="${deployer_statefile_foldername}" | tee plan_output.log
 		return_value=${PIPESTATUS[0]}
@@ -455,7 +455,7 @@ function install_library() {
 		allImportParameters=$(printf " -var-file=%s -var deployer_statefile_foldername=%s %s " "${var_file}" "${deployer_statefile_foldername}" "${extra_vars}")
 
 	else
-		$TOFU_CMD -chdir="${terraform_module_directory}" plan -no-color -detailed-exitcode \
+		$IAC_TOOL -chdir="${terraform_module_directory}" plan -no-color -detailed-exitcode \
 			-var-file="${var_file}" -input=false | tee -a plan_output.log
 		return_value=${PIPESTATUS[0]}
 		if [ $return_value -eq 1 ]; then
@@ -479,12 +479,12 @@ function install_library() {
 
 	if [ -n "${approve}" ]; then
 		# shellcheck disable=SC2086
-		$TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -no-color -compact-warnings -json -input=false $allParameters --auto-approve | tee apply_output.json
+		$IAC_TOOL -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -no-color -compact-warnings -json -input=false $allParameters --auto-approve | tee apply_output.json
 		return_value=${PIPESTATUS[0]}
 
 	else
 		# shellcheck disable=SC2086
-		$TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -input=false $allParameters
+		$IAC_TOOL -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -input=false $allParameters
 		return_value=$?
 	fi
 
@@ -555,14 +555,14 @@ function install_library() {
 	fi
 
 	if [ "$DEBUG" = True ]; then
-		$TOFU_CMD -chdir="${terraform_module_directory}" output
+		$IAC_TOOL -chdir="${terraform_module_directory}" output
 	fi
 
-	tfstate_resource_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw tfstate_resource_id | tr -d \")
+	tfstate_resource_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw tfstate_resource_id | tr -d \")
 	export tfstate_resource_id
 	save_config_var "tfstate_resource_id" "${library_config_information}"
 
-	library_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+	library_random_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 	if [ -n "${library_random_id}" ]; then
 		save_config_var "library_random_id" "${library_config_information}"
 		custom_random_id="${library_random_id:0:3}"

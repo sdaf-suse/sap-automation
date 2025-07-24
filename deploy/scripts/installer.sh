@@ -22,7 +22,7 @@ script_directory="$(dirname "${full_script_path}")"
 caller_version="${SDAFWZ_CALLER_VERSION:-v2}"
 
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 banner_title="Installer"
 
@@ -527,9 +527,9 @@ version_parameter=""
 
 export TF_DATA_DIR="${param_dirname}/.terraform"
 
-$TOFU_CMD --version
+$IAC_TOOL --version
 echo ""
-echo "$TOFU_CMD details"
+echo "$IAC_TOOL details"
 echo "-------------------------------------------------------------------------"
 echo "Subscription:                        ${STATE_SUBSCRIPTION}"
 echo "Storage Account:                     ${REMOTE_STATE_SA}"
@@ -566,7 +566,7 @@ az account set --subscription "${terraform_storage_account_subscription_id}"
 if [ ! -f .terraform/terraform.tfstate ]; then
 	print_banner "$banner_title" "New deployment" "info"
 
-	if ! $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade  -input=false \
+	if ! $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade  -input=false \
 		--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 		--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
 		--backend-config "storage_account_name=${terraform_storage_account_name}" \
@@ -588,7 +588,7 @@ else
 
 			terraform_module_directory="${SAP_AUTOMATION_REPO_PATH}/deploy/terraform/bootstrap/${deployment_system}"/
 
-			if $TOFU_CMD -chdir="${terraform_module_directory}" init -migrate-state  -upgrade  --backend-config "path=${param_dirname}/terraform.tfstate"; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" init -migrate-state  -upgrade  --backend-config "path=${param_dirname}/terraform.tfstate"; then
 				return_value=$?
 				print_banner "$banner_title" "Terraform local init succeeded" "success"
 			else
@@ -600,7 +600,7 @@ else
 
 		terraform_module_directory="${SAP_AUTOMATION_REPO_PATH}/deploy/terraform/run/${deployment_system}"/
 
-		if $TOFU_CMD -chdir="${terraform_module_directory}" init -force-copy -upgrade  -migrate-state \
+		if $IAC_TOOL -chdir="${terraform_module_directory}" init -force-copy -upgrade  -migrate-state \
 			--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 			--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
 			--backend-config "storage_account_name=${terraform_storage_account_name}" \
@@ -619,7 +619,7 @@ else
 		echo "Terraform state:                     remote"
 		print_banner "$banner_title" "The system has already been deployed and the state file is in Azure" "info"
 
-		if $TOFU_CMD -chdir="${terraform_module_directory}" init  -upgrade -force-copy -migrate-state \
+		if $IAC_TOOL -chdir="${terraform_module_directory}" init  -upgrade -force-copy -migrate-state \
 			--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 			--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
 			--backend-config "storage_account_name=${terraform_storage_account_name}" \
@@ -636,7 +636,7 @@ else
 fi
 
 if [ 1 -eq "$new_deployment" ]; then
-	if $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+	if $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 		print_banner "$banner_title" "New deployment" "info"
 		deployment_parameter=" -var deployment=new "
 		new_deployment=0
@@ -648,7 +648,7 @@ if [ 1 -eq "$new_deployment" ]; then
 fi
 
 if [ 1 -eq $new_deployment ]; then
-	deployed_using_version=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw automation_version | tr -d \")
+	deployed_using_version=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw automation_version | tr -d \")
 	if [ -z "${deployed_using_version}" ]; then
 		print_banner "$banner_title" "The environment was deployed using an older version of the Terraform templates" "error" "Please inspect the output of Terraform plan carefully!"
 
@@ -688,7 +688,7 @@ fi
 allParameters=$(printf " -var-file=%s %s %s %s %s" "${var_file}" "${extra_vars}" "${deployment_parameter}" "${version_parameter}" "${credentialVariable}")
 apply_needed=0
 
-if $TOFU_CMD -chdir="$terraform_module_directory" plan $allParameters -input=false -detailed-exitcode -compact-warnings -no-color | tee plan_output.log; then
+if $IAC_TOOL -chdir="$terraform_module_directory" plan $allParameters -input=false -detailed-exitcode -compact-warnings -no-color | tee plan_output.log; then
 	return_value=${PIPESTATUS[0]}
 	print_banner "$banner_title" "Terraform plan succeeded." "success" "Terraform plan return code: $return_value"
 else
@@ -707,19 +707,19 @@ if [ 1 != $return_value ]; then
 	if [ "${deployment_system}" == sap_deployer ]; then
 		state_path="DEPLOYER"
 
-		if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+		if ! $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 
-			deployer_public_ip_address=$($TOFU_CMD -chdir="${terraform_module_directory}" output deployer_public_ip_address | tr -d \")
+			deployer_public_ip_address=$($IAC_TOOL -chdir="${terraform_module_directory}" output deployer_public_ip_address | tr -d \")
 			save_config_var "deployer_public_ip_address" "${system_config_information}"
 
-			keyvault=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
+			keyvault=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
 			if [ -n "$keyvault" ]; then
 				save_config_var "keyvault" "${system_config_information}"
 			fi
 			if [ 1 == $called_from_ado ]; then
 
 				if [[ "$TF_VAR_use_webapp" == "true" && $IS_PIPELINE_DEPLOYMENT = "true" ]]; then
-					webapp_url_base=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw webapp_url_base | tr -d \")
+					webapp_url_base=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw webapp_url_base | tr -d \")
 
 					if [ -n "$webapp_url_base" ]; then
 						az_var=$(az pipelines variable-group variable list --group-id "${VARIABLE_GROUP_ID}" --query "WEBAPP_URL_BASE.value")
@@ -730,7 +730,7 @@ if [ 1 != $return_value ]; then
 						fi
 					fi
 
-					webapp_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw webapp_id | tr -d \")
+					webapp_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw webapp_id | tr -d \")
 					if [ -n "$webapp_id" ]; then
 						az_var=$(az pipelines variable-group variable list --group-id "${VARIABLE_GROUP_ID}" --query "WEBAPP_ID.value")
 						if [ -z "${az_var}" ]; then
@@ -740,7 +740,7 @@ if [ 1 != $return_value ]; then
 						fi
 					fi
 
-					msi_object_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_user_assigned_identity | tr -d \")
+					msi_object_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw deployer_user_assigned_identity | tr -d \")
 
 					if [ -n "$msi_object_id" ]; then
 						az_var=$(az pipelines variable-group variable list --group-id "${VARIABLE_GROUP_ID}" --query "MSI_ID.value")
@@ -773,18 +773,18 @@ if [ 1 != $return_value ]; then
 			exit 1
 		fi
 		state_path="LIBRARY"
-		if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
-			tfstate_resource_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output tfstate_resource_id | tr -d \")
+		if ! $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+			tfstate_resource_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output tfstate_resource_id | tr -d \")
 			STATE_SUBSCRIPTION=$(echo "$tfstate_resource_id" | cut -d/ -f3 | tr -d \" | xargs)
 
 			az account set --sub "${STATE_SUBSCRIPTION}"
 
-			REMOTE_STATE_SA=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
+			REMOTE_STATE_SA=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
 
 			getAndStoreTerraformStateStorageAccountDetails "${REMOTE_STATE_SA}" "${system_config_information}"
 
 			if [ 1 == "$called_from_ado" ]; then
-				SAPBITS=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw sapbits_storage_account_name | tr -d \")
+				SAPBITS=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw sapbits_storage_account_name | tr -d \")
 				if [ -n "${SAPBITS}" ]; then
 					az_var=$(az pipelines variable-group variable list --group-id "${VARIABLE_GROUP_ID}" --query "INSTALLATION_MEDIA_ACCOUNT.value")
 					if [ -z "${az_var}" ]; then
@@ -973,7 +973,7 @@ if [ 1 == $apply_needed ]; then
 
 	if [ -n "${approve}" ]; then
 		# shellcheck disable=SC2086
-		if $TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -no-color -compact-warnings -json -input=false $allParameters | tee apply_output.json; then
+		if $IAC_TOOL -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" -no-color -compact-warnings -json -input=false $allParameters | tee apply_output.json; then
 			return_value=${PIPESTATUS[0]}
 		else
 			return_value=${PIPESTATUS[0]}
@@ -981,7 +981,7 @@ if [ 1 == $apply_needed ]; then
 
 	else
 		# shellcheck disable=SC2086
-		if $TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" $allParameters; then
+		if $IAC_TOOL -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" $allParameters; then
 			return_value=$?
 		else
 			return_value=$?
@@ -1089,10 +1089,10 @@ fi
 
 if [ "${deployment_system}" == sap_deployer ]; then
 
-	# $TOFU_CMD -chdir="${terraform_module_directory}"  output
-	if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+	# $IAC_TOOL -chdir="${terraform_module_directory}"  output
+	if ! $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 
-		deployer_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+		deployer_random_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 		if [ -n "${deployer_random_id}" ]; then
 			save_config_var "deployer_random_id" "${system_config_information}"
 			custom_random_id="${deployer_random_id:0:3}"
@@ -1101,7 +1101,7 @@ if [ "${deployment_system}" == sap_deployer ]; then
 		fi
 	fi
 
-	deployer_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+	deployer_random_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 	if [ -n "${deployer_random_id}" ]; then
 		save_config_var "deployer_random_id" "${system_config_information}"
 		custom_random_id="${deployer_random_id}"
@@ -1111,11 +1111,11 @@ if [ "${deployment_system}" == sap_deployer ]; then
 	fi
 
 	# shellcheck disable=SC2034
-	deployer_public_ip_address=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_public_ip_address | tr -d \")
+	deployer_public_ip_address=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw deployer_public_ip_address | tr -d \")
 	save_config_var "deployer_public_ip_address" "${system_config_information}"
 
-	if ($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \"); then
-		keyvault=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
+	if ($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \"); then
+		keyvault=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_name | tr -d \")
 		if valid_kv_name "$keyvault"; then
 			save_config_var "keyvault" "${system_config_information}"
 		else
@@ -1132,12 +1132,12 @@ fi
 
 if [ "${deployment_system}" == sap_landscape ]; then
 
-	if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
-		workloadkeyvault=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw workloadzone_kv_name | tr -d \")
+	if ! $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+		workloadkeyvault=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw workloadzone_kv_name | tr -d \")
 		if [ -n "${workloadkeyvault}" ]; then
 			save_config_var "workloadkeyvault" "${system_config_information}"
 		fi
-		workload_zone_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+		workload_zone_random_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 		if [ -n "${workload_zone_random_id}" ]; then
 			save_config_var "workload_zone_random_id" "${system_config_information}"
 			custom_random_id="${workload_zone_random_id:0:3}"
@@ -1150,10 +1150,10 @@ if [ "${deployment_system}" == sap_landscape ]; then
 fi
 
 if [ "${deployment_system}" == sap_library ]; then
-	REMOTE_STATE_SA=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
-	sapbits_storage_account_name=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw sapbits_storage_account_name | tr -d \")
+	REMOTE_STATE_SA=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
+	sapbits_storage_account_name=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw sapbits_storage_account_name | tr -d \")
 
-	library_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+	library_random_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 	if [ -n "${library_random_id}" ]; then
 		save_config_var "library_random_id" "${system_config_information}"
 		custom_random_id="${library_random_id:0:3}"

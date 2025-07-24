@@ -22,7 +22,7 @@ parent_caller="${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]}"
 parent_caller_directory="$(dirname $(realpath "${parent_caller}"))"
 
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 # Check if parent caller is from v1 directory
 if [[ "${parent_caller_directory}" == *"/v1/"* || "${parent_caller_directory}" == *"/v1" ]]; then
@@ -673,7 +673,7 @@ TF_VAR_subscription_id="$ARM_SUBSCRIPTION_ID"
 export TF_VAR_subscription_id
 
 if [ ! -d .terraform/ ]; then
-	if ! $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true \
+	if ! $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true \
 		--backend-config "subscription_id=${STATE_SUBSCRIPTION}" \
 		--backend-config "resource_group_name=${REMOTE_STATE_RG}" \
 		--backend-config "storage_account_name=${REMOTE_STATE_SA}" \
@@ -694,7 +694,7 @@ else
 	local_backend=$(grep "\"type\": \"local\"" .terraform/terraform.tfstate || true)
 	if [ -n "${local_backend}" ]; then
 
-		if ! $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true -force-copy \
+		if ! $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true -force-copy \
 			--backend-config "subscription_id=${STATE_SUBSCRIPTION}" \
 			--backend-config "resource_group_name=${REMOTE_STATE_RG}" \
 			--backend-config "storage_account_name=${REMOTE_STATE_SA}" \
@@ -711,7 +711,7 @@ else
 			echo ""
 		fi
 	else
-		if ! $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true; then
+		if ! $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true; then
 			return_value=$?
 			echo ""
 			echo -e "${bold_red}Terraform init:                        failed$reset_formatting"
@@ -736,7 +736,7 @@ if [ 0 != $return_value ]; then
 	echo "Terraform initialization failed"
 	exit $return_value
 fi
-if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+if ! $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 	check_output=1
 else
 	check_output=0
@@ -750,7 +750,7 @@ save_config_var "tfstate_resource_id" "${workload_config_information}"
 allParameters=$(printf " -var-file=%s %s %s %s " "${var_file}" "${extra_vars}" "${tfstate_parameter}" "${deployer_tfstate_key_parameter}")
 
 if [ 1 == $check_output ]; then
-	if $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+	if $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 
 		check_output=0
 		apply_needed=1
@@ -768,12 +768,12 @@ if [ 1 == $check_output ]; then
 		echo "#########################################################################################"
 		echo ""
 
-		workloadkeyvault=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw workloadzone_kv_name | tr -d \")
+		workloadkeyvault=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw workloadzone_kv_name | tr -d \")
 		if valid_kv_name "$workloadkeyvault"; then
 			save_config_var "workloadkeyvault" "${workload_config_information}"
 		fi
 
-		deployed_using_version=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw automation_version)
+		deployed_using_version=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw automation_version)
 		if [ -z "${deployed_using_version}" ]; then
 			echo ""
 			echo "#########################################################################################"
@@ -819,7 +819,7 @@ export TF_VAR_subscription="${subscription}"
 export TF_VAR_management_subscription="${STATE_SUBSCRIPTION}"
 
 if [ 1 == $check_output ]; then
-	deployed_using_version=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw automation_version)
+	deployed_using_version=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw automation_version)
 	if [ -n "${deployed_using_version}" ]; then
 		printf -v val %-.20s "$deployed_using_version"
 		echo ""
@@ -835,13 +835,13 @@ if [ 1 == $check_output ]; then
 
 		if [ 2 == $older_version ]; then
 
-			if $TOFU_CMD -chdir="${terraform_module_directory}" state rm module.sap_landscape.azurerm_private_dns_a_record.transport[0]; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" state rm module.sap_landscape.azurerm_private_dns_a_record.transport[0]; then
 				echo "Removed the transport private DNS record"
 			fi
-			if $TOFU_CMD -chdir="${terraform_module_directory}" state rm module.sap_landscape.azurerm_private_dns_a_record.install[0]; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" state rm module.sap_landscape.azurerm_private_dns_a_record.install[0]; then
 				echo "Removed the transport private DNS record"
 			fi
-			if $TOFU_CMD -chdir="${terraform_module_directory}" state rm module.sap_landscape.azurerm_private_dns_a_record.keyvault[0]; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" state rm module.sap_landscape.azurerm_private_dns_a_record.keyvault[0]; then
 				echo "Removed the transport private DNS record"
 			fi
 
@@ -856,26 +856,26 @@ if [ 1 == $check_output ]; then
 			# Remediating the Storage Accounts and File Shares
 
 			moduleID='module.sap_landscape.azurerm_storage_account.storage_bootdiag[0]'
-			storage_account_name=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw storageaccount_name)
-			storage_account_rg_name=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw storageaccount_rg_name)
+			storage_account_name=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw storageaccount_name)
+			storage_account_rg_name=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw storageaccount_rg_name)
 			STORAGE_ACCOUNT_ID=$(az storage account show --subscription "${subscription}" --name "${storage_account_name}" --resource-group "${storage_account_rg_name}" --query "id" --output tsv)
 			export STORAGE_ACCOUNT_ID
 
 			ReplaceResourceInStateFile "${moduleID}" "${terraform_module_directory}" "providers/Microsoft.Storage/storageAccounts"
 
 			moduleID='module.sap_landscape.azurerm_storage_account.witness_storage[0]'
-			storage_account_name=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw witness_storage_account)
+			storage_account_name=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw witness_storage_account)
 			STORAGE_ACCOUNT_ID=$(az storage account show --subscription "${subscription}" --name "${storage_account_name}" --resource-group "${storage_account_rg_name}" --query "id" --output tsv)
 			export STORAGE_ACCOUNT_ID
 			ReplaceResourceInStateFile "${moduleID}" "${terraform_module_directory}" "providers/Microsoft.Storage/storageAccounts"
 
 			moduleID='module.sap_landscape.azurerm_storage_account.transport[0]'
-			STORAGE_ACCOUNT_ID=$($TOFU_CMD -chdir="${terraform_module_directory}" output -raw transport_storage_account_id | xargs | cut -d "=" -f2 | xargs)
+			STORAGE_ACCOUNT_ID=$($IAC_TOOL -chdir="${terraform_module_directory}" output -raw transport_storage_account_id | xargs | cut -d "=" -f2 | xargs)
 			export STORAGE_ACCOUNT_ID
 			ReplaceResourceInStateFile "${moduleID}" "${terraform_module_directory}" "providers/Microsoft.Storage/storageAccounts"
 
 			moduleID='module.sap_landscape.azurerm_storage_account.install[0]'
-			storage_account_name=$($TOFU_CMD -chdir="${terraform_module_directory}" output -raw install_path | xargs | cut -d "/" -f2 | xargs)
+			storage_account_name=$($IAC_TOOL -chdir="${terraform_module_directory}" output -raw install_path | xargs | cut -d "/" -f2 | xargs)
 			STORAGE_ACCOUNT_ID=$(az storage account show --subscription "${subscription}" --name "${storage_account_name}" --query "id" --output tsv)
 			export STORAGE_ACCOUNT_ID
 
@@ -911,7 +911,7 @@ echo ""
 allParameters=$(printf " -var-file=%s %s %s %s " "${var_file}" "${extra_vars}" "${tfstate_parameter}" "${deployer_tfstate_key_parameter}")
 
 # shellcheck disable=SC2086
-if ! $TOFU_CMD -chdir="$terraform_module_directory" plan -detailed-exitcode $allParameters -input=false | tee plan_output.log; then
+if ! $IAC_TOOL -chdir="$terraform_module_directory" plan -detailed-exitcode $allParameters -input=false | tee plan_output.log; then
 	return_value=${PIPESTATUS[0]}
 else
 	return_value=${PIPESTATUS[0]}
@@ -1009,8 +1009,8 @@ if [ -f plan_output.log ]; then
 fi
 
 if [ 0 == $return_value ]; then
-	if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
-		workloadkeyvault=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw workloadzone_kv_name | tr -d \")
+	if ! $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+		workloadkeyvault=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw workloadzone_kv_name | tr -d \")
 		if valid_kv_name "$workloadkeyvault"; then
 			save_config_var "workloadkeyvault" "${workload_config_information}"
 		fi
@@ -1042,7 +1042,7 @@ if [ 1 == $apply_needed ]; then
 
 	if [ -n "${approve}" ]; then
 		# Using if so that no zero return codes don't fail -o errexit
-		if ! $TOFU_CMD -chdir="${terraform_module_directory}" apply "${approve}" -parallelism="${parallelism}" -no-color -json $allParameters -input=false | tee apply_output.json; then
+		if ! $IAC_TOOL -chdir="${terraform_module_directory}" apply "${approve}" -parallelism="${parallelism}" -no-color -json $allParameters -input=false | tee apply_output.json; then
 			return_value=${PIPESTATUS[0]}
 		else
 			return_value=${PIPESTATUS[0]}
@@ -1062,7 +1062,7 @@ if [ 1 == $apply_needed ]; then
 		fi
 	else
 		# Using if so that no zero return codes don't fail -o errexit
-		$TOFU_CMD -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" $allParameters
+		$IAC_TOOL -chdir="${terraform_module_directory}" apply -parallelism="${parallelism}" $allParameters
 		return_value=$?
 
 		echo    "Return value:                        $return_value"
@@ -1153,14 +1153,14 @@ fi
 
 save_config_var "landscape_tfstate_key" "${workload_config_information}"
 
-if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+if ! $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 
-	workload_zone_prefix=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw workload_zone_prefix | tr -d \")
+	workload_zone_prefix=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw workload_zone_prefix | tr -d \")
 	save_config_var "workload_zone_prefix" "${workload_config_information}"
 	save_config_vars "landscape_tfstate_key" "${workload_config_information}"
-	workload_keyvault=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw workloadzone_kv_name | tr -d \")
+	workload_keyvault=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw workloadzone_kv_name | tr -d \")
 
-	workload_random_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
+	workload_random_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw random_id | tr -d \")
 	if [ -n "${workload_random_id}" ]; then
 		save_config_var "workload_random_id" "${workload_config_information}"
 		custom_random_id="${workload_random_id:0:3}"
@@ -1168,7 +1168,7 @@ if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"
 		printf "# The parameter 'custom_random_id' can be used to control the random 3 digits at the end of the storage accounts and key vaults\ncustom_random_id=\"%s\"\n" "${custom_random_id}" >>"${var_file}"
 	fi
 
-	resourceGroupName=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_name | tr -d \")
+	resourceGroupName=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_name | tr -d \")
 
 	temp=$(echo "${workload_keyvault}" | grep "Warning" || true)
 	if [ -z "${temp}" ]; then

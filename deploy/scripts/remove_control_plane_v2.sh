@@ -46,7 +46,7 @@ if [[ "${DEBUG:-false}" == 'true' ]]; then
 fi
 
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 # Constants
 script_directory="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
@@ -432,7 +432,7 @@ function remove_control_plane() {
 		azure_backend=$(grep "\"type\": \"azurerm\"" .terraform/terraform.tfstate || true)
 		if [ -n "$azure_backend" ]; then
 			echo "Terraform state:                     remote"
-			if $TOFU_CMD -chdir="${terraform_module_directory}" init -migrate-state -upgrade -force-copy --backend-config "path=${param_dirname}/terraform.tfstate"; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" init -migrate-state -upgrade -force-copy --backend-config "path=${param_dirname}/terraform.tfstate"; then
 				return_value=$?
 				print_banner "Remove Control Plane " "Terraform init succeeded (deployer - local)" "success"
 			else
@@ -442,7 +442,7 @@ function remove_control_plane() {
 
 		else
 			echo "Terraform state:                     local"
-			if $TOFU_CMD -chdir="${terraform_module_directory}" init  -upgrade --backend-config "path=${param_dirname}/terraform.tfstate"; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" init  -upgrade --backend-config "path=${param_dirname}/terraform.tfstate"; then
 				return_value=$?
 				print_banner "Remove Control Plane " "Terraform init succeeded (deployer - local)" "success"
 			else
@@ -453,7 +453,7 @@ function remove_control_plane() {
 		fi
 	else
 		echo "Terraform state:                     unknown"
-		if $TOFU_CMD -chdir="${terraform_module_directory}" init -reconfigure -upgrade --backend-config "path=${param_dirname}/terraform.tfstate"; then
+		if $IAC_TOOL -chdir="${terraform_module_directory}" init -reconfigure -upgrade --backend-config "path=${param_dirname}/terraform.tfstate"; then
 			return_value=$?
 			print_banner "Remove Control Plane " "Terraform init succeeded (deployer - local)" "success"
 		else
@@ -462,7 +462,7 @@ function remove_control_plane() {
 		fi
 	fi
 
-	diagnostics_account_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output diagnostics_account_id | tr -d \")
+	diagnostics_account_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output diagnostics_account_id | tr -d \")
 	if [ -n "${diagnostics_account_id}" ]; then
 		diagnostics_account_name=$(echo "${diagnostics_account_id}" | cut -d'/' -f9)
 		diagnostics_account_resource_group_name=$(echo "${diagnostics_account_id}" | cut -d'/' -f5)
@@ -470,7 +470,7 @@ function remove_control_plane() {
 		az storage account update --name "$diagnostics_account_name" --resource-group "$diagnostics_account_resource_group_name" --subscription "$diagnostics_account_subscription_id" --allow-shared-key-access --output none
 	fi
 
-	if $TOFU_CMD -chdir="${terraform_module_directory}" apply -input=false -var-file="${deployer_parameter_file}" "${approve_parameter}"; then
+	if $IAC_TOOL -chdir="${terraform_module_directory}" apply -input=false -var-file="${deployer_parameter_file}" "${approve_parameter}"; then
 		return_value=$?
 		print_banner "Remove Control Plane " "Terraform apply (deployer) succeeded" "success"
 	else
@@ -484,8 +484,8 @@ function remove_control_plane() {
 	export TF_VAR_deployer_statefile_foldername="${deployer_statefile_foldername_path}"
 
 	if [ -z $TF_VAR_spn_keyvault_id ]; then
-		if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
-			keyvault_id=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_arm_id | tr -d \")
+		if ! $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+			keyvault_id=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw deployer_kv_user_arm_id | tr -d \")
 			TF_VAR_spn_keyvault_id="${keyvault_id}"
 			export TF_VAR_spn_keyvault_id
 		fi
@@ -506,7 +506,7 @@ function remove_control_plane() {
 		azure_backend=$(grep "\"type\": \"azurerm\"" .terraform/terraform.tfstate || true)
 		if [ -n "$azure_backend" ]; then
 			echo "Terraform state:                     remote"
-			if $TOFU_CMD -chdir="${terraform_module_directory}" init  -upgrade -force-copy -migrate-state --backend-config "path=${param_dirname}/terraform.tfstate"; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" init  -upgrade -force-copy -migrate-state --backend-config "path=${param_dirname}/terraform.tfstate"; then
 				return_value=$?
 				print_banner "Remove Control Plane " "Terraform init succeeded (library - local)" "success"
 			else
@@ -515,7 +515,7 @@ function remove_control_plane() {
 			fi
 		else
 			echo "Terraform state:                     local"
-			if $TOFU_CMD -chdir="${terraform_module_directory}" init  -upgrade -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" init  -upgrade -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
 				return_value=$?
 				print_banner "Remove Control Plane " "Terraform init succeeded (library - local)" "success"
 			else
@@ -526,7 +526,7 @@ function remove_control_plane() {
 		fi
 	else
 		echo "Terraform state:                     unknown"
-		if $TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
+		if $IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade -reconfigure --backend-config "path=${param_dirname}/terraform.tfstate"; then
 			return_value=$?
 			print_banner "Remove Control Plane " "Terraform init succeeded (library - local)" "success"
 		else
@@ -555,7 +555,7 @@ function remove_control_plane() {
 
 	print_banner "Remove Control Plane " "Running Terraform destroy (library)" "info"
 
-	if $TOFU_CMD -chdir="${terraform_module_directory}" destroy -input=false -var-file="${library_parameter_file}" -var use_deployer=false -refresh=false -var "use_spn=$use_spn" "${approve_parameter}"; then
+	if $IAC_TOOL -chdir="${terraform_module_directory}" destroy -input=false -var-file="${library_parameter_file}" -var use_deployer=false -refresh=false -var "use_spn=$use_spn" "${approve_parameter}"; then
 		return_value=$?
 		print_banner "Remove Control Plane " "Terraform destroy (library) succeeded" "success"
 	else
@@ -602,7 +602,7 @@ function remove_control_plane() {
 
 		print_banner "Remove Control Plane " "Running Terraform destroy (deployer)" "info"
 
-		if $TOFU_CMD -chdir="${terraform_module_directory}" destroy -input=false -var-file="${var_file}" -refresh=false -var "use_spn=$use_spn" "${approve_parameter}"; then
+		if $IAC_TOOL -chdir="${terraform_module_directory}" destroy -input=false -var-file="${var_file}" -refresh=false -var "use_spn=$use_spn" "${approve_parameter}"; then
 			return_value=$?
 			print_banner "Remove Control Plane " "Terraform destroy (deployer) succeeded" "success"
 			if [ -f "${param_dirname}/terraform.tfstate" ]; then

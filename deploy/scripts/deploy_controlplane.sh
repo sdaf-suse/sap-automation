@@ -44,7 +44,7 @@ source "${script_directory}/deploy_utils.sh"
 source "${script_directory}/helpers/script_helpers.sh"
 
 # Infrastructure as Code tool selection (terraform or tofu)
-TOFU_CMD="${TOFU_CMD:-tofu}"
+IAC_TOOL="${IAC_TOOL:-tofu}"
 
 force=0
 step=0
@@ -483,9 +483,9 @@ if [ 0 != "$step" ]; then
 					echo "Terraform state:                     remote"
 
 					terraform_module_directory="$SAP_AUTOMATION_REPO_PATH"/deploy/terraform/run/sap_deployer/
-					$TOFU_CMD -chdir="${terraform_module_directory}" init -upgrade=true
+					$IAC_TOOL -chdir="${terraform_module_directory}" init -upgrade=true
 
-					keyvault=$($TOFU_CMD -chdir="${terraform_module_directory}" output deployer_kv_user_name | tr -d \")
+					keyvault=$($IAC_TOOL -chdir="${terraform_module_directory}" output deployer_kv_user_name | tr -d \")
 					save_config_var "keyvault" "${deployer_config_information}"
 					DEPLOYER_KEYVAULT="${keyvault}"
 					save_config_var "DEPLOYER_KEYVAULT" "${deployer_config_information}"
@@ -661,23 +661,23 @@ if [ 2 -eq $step ]; then
 		fi
 	fi
 
-	if ! $TOFU_CMD -chdir="${terraform_module_directory}" output | grep "No outputs"; then
+	if ! $IAC_TOOL -chdir="${terraform_module_directory}" output | grep "No outputs"; then
 
 		if [ -z "$REMOTE_STATE_SA" ]; then
-			REMOTE_STATE_RG=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw sapbits_sa_resource_group_name | tr -d \")
+			REMOTE_STATE_RG=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw sapbits_sa_resource_group_name | tr -d \")
 		fi
 		if [ -z "$REMOTE_STATE_SA" ]; then
-			REMOTE_STATE_SA=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
+			REMOTE_STATE_SA=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw remote_state_storage_account_name | tr -d \")
 		fi
 		if [ -z "$STATE_SUBSCRIPTION" ]; then
-			STATE_SUBSCRIPTION=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id | tr -d \")
+			STATE_SUBSCRIPTION=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id | tr -d \")
 		fi
 
 		if [ "${ado_flag}" != "--ado" ]; then
 			az storage account network-rule add -g "${REMOTE_STATE_RG}" --account-name "${REMOTE_STATE_SA}" --ip-address "${this_ip}" --output none
 		fi
 
-		TF_VAR_sa_connection_string=$($TOFU_CMD -chdir="${terraform_module_directory}" output -no-color -raw sa_connection_string | tr -d \")
+		TF_VAR_sa_connection_string=$($IAC_TOOL -chdir="${terraform_module_directory}" output -no-color -raw sa_connection_string | tr -d \")
 		export TF_VAR_sa_connection_string
 	fi
 	if [ -n "${tfstate_resource_id}" ]; then
