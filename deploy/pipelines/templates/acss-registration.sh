@@ -1,7 +1,7 @@
+#!/bin/bash
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-#!/bin/bash
 # Exit immediately if a command exits with a non-zero status.
 # Treat unset variables as an error when substituting.
 set -eu
@@ -16,6 +16,9 @@ __basedir="${ROOT_FOLDER}"
 acss_environment=${ACSS_ENVIRONMENT}
 acss_sap_product=${ACSS_SAP_PRODUCT}
 acss_workloads_extension_url="https://aka.ms/ACSSCLI"
+
+# Infrastructure as Code tool selection (terraform or tofu)
+IAC_TOOL="${IAC_TOOL:-tofu}"
 #--------------------------------------+---------------------------------------8
 
 echo -e "$green-- CODE_FOLDER:${CODE_FOLDER} --$reset"
@@ -67,7 +70,7 @@ TERRAFORM_REMOTE_STORAGE_RESOURCE_GROUP_NAME=$(az resource show --id "${tfstate_
 
 # Init Terraform
 __output=$( \
-terraform -chdir="${__moduleDir}"                                                       \
+$IAC_TOOL -chdir="${__moduleDir}"                                                       \
 init -upgrade=true                                                                      \
 --backend-config "subscription_id=${TERRAFORM_REMOTE_STORAGE_SUBSCRIPTION}"             \
 --backend-config "resource_group_name=${TERRAFORM_REMOTE_STORAGE_RESOURCE_GROUP_NAME}"  \
@@ -80,11 +83,11 @@ echo -e "$green--- Successfully configured the backend "azurerm"! Terraform will
 
 # Fetch values from Terraform State file
 # have awk only fetch the first line of the output: NR==2
-acss_scs_vm_id=$(     terraform -chdir="${__moduleDir}" output scs_vm_ids                  | awk -F\" 'NR==2{print $2}' | tr -d '\n\r\t[:space:]')
+acss_scs_vm_id=$(     $IAC_TOOL -chdir="${__moduleDir}" output scs_vm_ids                  | awk -F\" 'NR==2{print $2}' | tr -d '\n\r\t[:space:]')
 echo -e "$green--- SCS VM ID: $acss_scs_vm_id ---$reset"
-acss_sid=$(           terraform -chdir="${__moduleDir}" output sid                         | tr -d '"')
-acss_resource_group=$(terraform -chdir="${__moduleDir}" output created_resource_group_name | tr -d '"')
-acss_location=$(      terraform -chdir="${__moduleDir}" output region                      | tr -d '"')
+acss_sid=$(           $IAC_TOOL -chdir="${__moduleDir}" output sid                         | tr -d '"')
+acss_resource_group=$($IAC_TOOL -chdir="${__moduleDir}" output created_resource_group_name | tr -d '"')
+acss_location=$(      $IAC_TOOL -chdir="${__moduleDir}" output region                      | tr -d '"')
 
 unset TF_DATA_DIR __configDir __moduleDir __output
 cd $__basedir

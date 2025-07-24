@@ -494,67 +494,6 @@ if [ "$resource_group_exist" ]; then
 
 		allParameters=$(printf " -var-file=%s %s %s  %s " "${var_file}" "${extra_vars}" "${tfstate_parameter}" "${deployer_tfstate_key_parameter}")
 
-		# moduleID="module.sap_landscape.azurerm_key_vault_secret.sid_ppk"
-		# if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 	if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-		# 		echo "Secret 'sid_ppk' removed from state"
-		# 	fi
-		# fi
-
-		# moduleID="module.sap_landscape.azurerm_key_vault_secret.sid_pk"
-		# if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 	if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-		# 		echo "Secret 'sid_pk' removed from state"
-		# 	fi
-		# fi
-
-		# if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 	moduleID="module.sap_landscape.azurerm_key_vault_secret.sid_username"
-		# 	if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-		# 		echo "Secret 'sid_username' removed from state"
-		# 	fi
-		# fi
-
-		# moduleID="module.sap_landscape.azurerm_key_vault_secret.sid_password"
-		# if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 	if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-		# 		echo "Secret 'sid_password' removed from state"
-		# 	fi
-		# fi
-
-		# moduleID="module.sap_landscape.azurerm_key_vault_secret.witness_access_key"
-		# if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 	if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-		# 		echo "Secret 'witness_access_key' removed from state"
-		# 	fi
-		# fi
-
-		# moduleID="module.sap_landscape.azurerm_key_vault_secret.deployer_keyvault_user_name"
-		# if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 	if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-		# 		echo "Secret 'deployer_keyvault_user_name' removed from state"
-		# 	fi
-		# fi
-
-		# moduleID="module.sap_landscape.azurerm_key_vault_secret.witness_name"
-		# if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 	if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-		# 		echo "Secret 'witness_name' removed from state"
-		# 	fi
-		# fi
-
-		# moduleID="module.sap_landscape.azurerm_key_vault_secret.cp_subscription_id"
-		# if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 	if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-		# 		echo "Secret 'cp_subscription_id' removed from state"
-		# 	fi
-		# fi
-		# moduleID="module.sap_landscape.data.azurerm_key_vault_secret.cp_subscription_id"
-		# if terraform -chdir="${terraform_module_directory}" state list -id="${moduleID}"; then
-		# 	if terraform -chdir="${terraform_module_directory}" state rm "${moduleID}"; then
-		# 		echo "Secret 'data.cp_subscription_id' removed from state"
-		# 	fi
-		# fi
 		if [ -n "${approve}" ]; then
 			# shellcheck disable=SC2086
 			if $IAC_TOOL -chdir="${terraform_module_directory}" destroy $allParameters "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
@@ -687,43 +626,6 @@ if [ "${deployment_system}" == sap_library ]; then
 	sed -i /REMOTE_STATE_SA/d "${system_config_information}"
 	sed -i /tfstate_resource_id/d "${system_config_information}"
 fi
-
-# if [ "${deployment_system}" == sap_system ]; then
-
-#     echo "#########################################################################################"
-#     echo "#                                                                                       #"
-#     echo -e "#                            $cyan Clean up load balancer IP $reset_formatting        #"
-#     echo "#                                                                                       #"
-#     echo "#########################################################################################"
-
-#     database_loadbalancer_public_ip_address=$(terraform -chdir="${terraform_module_directory}" output -no-color database_loadbalancer_ip | tr -d "\n"  | tr -d "("  | tr -d ")" | tr -d " ")
-#     database_loadbalancer_public_ip_address=$(echo ${database_loadbalancer_public_ip_address/tolist/})
-#     database_loadbalancer_public_ip_address=$(echo ${database_loadbalancer_public_ip_address/,]/]})
-#     echo "Database Load Balancer IP: $database_loadbalancer_public_ip_address"
-
-#     load_config_vars "${parameterfile_name}" "database_loadbalancer_ips"
-#     database_loadbalancer_ips=$(echo ${database_loadbalancer_ips} | xargs)
-
-#     if [[ "${database_loadbalancer_public_ip_address}" != "${database_loadbalancer_ips}" ]];
-#     then
-#       database_loadbalancer_ips=${database_loadbalancer_public_ip_address}
-#       save_config_var "database_loadbalancer_ips" "${parameterfile_name}"
-#     fi
-
-#     scs_loadbalancer_public_ip_address=$(terraform -chdir="${terraform_module_directory}" output -no-color scs_loadbalancer_ips | tr -d "\n"  | tr -d "("  | tr -d ")" | tr -d " ")
-#     scs_loadbalancer_public_ip_address=$(echo ${scs_loadbalancer_public_ip_address/tolist/})
-#     scs_loadbalancer_public_ip_address=$(echo ${scs_loadbalancer_public_ip_address/,]/]})
-#     echo "SCS Load Balancer IP: $scs_loadbalancer_public_ip_address"
-
-#     load_config_vars "${parameterfile_name}" "scs_server_loadbalancer_ips"
-#     scs_server_loadbalancer_ips=$(echo ${scs_server_loadbalancer_ips} | xargs)
-
-#     if [[ "${scs_loadbalancer_public_ip_address}" != "${scs_server_loadbalancer_ips}" ]];
-#     then
-#       scs_server_loadbalancer_ips=${scs_loadbalancer_public_ip_address}
-#       save_config_var "scs_server_loadbalancer_ips" "${parameterfile_name}"
-#     fi
-# fi
 
 unset TF_DATA_DIR
 
