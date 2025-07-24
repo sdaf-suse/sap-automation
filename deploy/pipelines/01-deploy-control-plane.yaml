@@ -89,31 +89,31 @@ stages:
               script: |
                 #!/bin/bash
                 echo "Installing OpenTofu..."
-                
+
                 # Detect OS and architecture
                 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
                 ARCH=$(uname -m)
-                
+
                 case $ARCH in
                   x86_64) ARCH="amd64" ;;
                   aarch64) ARCH="arm64" ;;
                   arm64) ARCH="arm64" ;;
                   *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
                 esac
-                
+
                 # Get latest OpenTofu version
                 TOFU_VERSION=$(curl -s https://api.github.com/repos/opentofu/opentofu/releases/latest | grep -o '"tag_name": "[^"]*' | grep -o '[^"]*$' | sed 's/^v//')
                 echo "Installing OpenTofu version: $TOFU_VERSION"
-                
+
                 # Download and install OpenTofu
                 DOWNLOAD_URL="https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_${OS}_${ARCH}.zip"
                 echo "Download URL: $DOWNLOAD_URL"
-                
+
                 curl -fsSL "$DOWNLOAD_URL" -o /tmp/tofu.zip
                 sudo unzip -o /tmp/tofu.zip -d /usr/local/bin/
                 sudo chmod +x /usr/local/bin/tofu
                 rm /tmp/tofu.zip
-                
+
                 # Verify installation
                 tofu version
                 echo "OpenTofu installation completed successfully"
@@ -232,7 +232,43 @@ stages:
           - template:                  templates\download.yaml
             parameters:
               getLatestFromBranch: true
+            # Install OpenTofu
+          - task:                      Bash@3
+            displayName:               Install OpenTofu
+            inputs:
+              targetType:              'inline'
+              script: |
+                #!/bin/bash
+                echo "Installing OpenTofu..."
 
+                # Detect OS and architecture
+                OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+                ARCH=$(uname -m)
+
+                case $ARCH in
+                  x86_64) ARCH="amd64" ;;
+                  aarch64) ARCH="arm64" ;;
+                  arm64) ARCH="arm64" ;;
+                  *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+                esac
+
+                # Get latest OpenTofu version
+                TOFU_VERSION=$(curl -s https://api.github.com/repos/opentofu/opentofu/releases/latest | grep -o '"tag_name": "[^"]*' | grep -o '[^"]*$' | sed 's/^v//')
+                echo "Installing OpenTofu version: $TOFU_VERSION"
+
+                # Download and install OpenTofu
+                DOWNLOAD_URL="https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_${OS}_${ARCH}.zip"
+                echo "Download URL: $DOWNLOAD_URL"
+
+                curl -fsSL "$DOWNLOAD_URL" -o /tmp/tofu.zip
+                sudo unzip -o /tmp/tofu.zip -d /usr/local/bin/
+                sudo chmod +x /usr/local/bin/tofu
+                rm /tmp/tofu.zip
+
+                # Verify installation
+                tofu version
+                echo "OpenTofu installation completed successfully"
+              failOnStderr:            false
           - task:                      Bash@3
             inputs:
               targetType:              'filePath'
