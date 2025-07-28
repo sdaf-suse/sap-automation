@@ -619,7 +619,7 @@ else
 		echo "Terraform state:                     remote"
 		print_banner "$banner_title" "The system has already been deployed and the state file is in Azure" "info"
 
-		if $IAC_TOOL -chdir="${terraform_module_directory}" init  -upgrade -force-copy -migrate-state \
+		if $IAC_TOOL -chdir="${terraform_module_directory}" init  -reconfigure -upgrade -force-copy -migrate-state \
 			--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 			--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
 			--backend-config "storage_account_name=${terraform_storage_account_name}" \
