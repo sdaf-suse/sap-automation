@@ -620,7 +620,12 @@ else
 		export TF_LOG="DEBUG"
 		print_banner "$banner_title" "The system has already been deployed and the state file is in Azure" "info"
 		echo "Terraform state file:                ${key}.terraform.tfstate"
-		if $IAC_TOOL -chdir="${terraform_module_directory}" init -reconfigure; then
+		if $IAC_TOOL -chdir="${terraform_module_directory}" init -reconfigure -upgrade -force-copy -input=false \
+				--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
+				--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
+				--backend-config "storage_account_name=${terraform_storage_account_name}" \
+				--backend-config "container_name=tfstate" \
+				--backend-config "key=${key}.terraform.tfstate"; then
 			if $IAC_TOOL -chdir="${terraform_module_directory}" init  -upgrade -force-copy -migrate-state \
 				--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
 				--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
