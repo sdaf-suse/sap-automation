@@ -617,19 +617,27 @@ else
 		fi
 	else
 		echo "Terraform state:                     remote"
+		export TF_LOG="DEBUG"
 		print_banner "$banner_title" "The system has already been deployed and the state file is in Azure" "info"
 		echo "Terraform state file:                ${key}.terraform.tfstate"
-		if $IAC_TOOL -chdir="${terraform_module_directory}" init  -reconfigure -upgrade -force-copy \
-			--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
-			--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
-			--backend-config "storage_account_name=${terraform_storage_account_name}" \
-			--backend-config "container_name=tfstate" \
-			--backend-config "key=${key}.terraform.tfstate"; then
-			return_value=$?
-			print_banner "$banner_title" "Terraform init succeeded." "success"
+		if $IAC_TOOL -chdir="${terraform_module_directory}" init -reconfigure; then
+			if $IAC_TOOL -chdir="${terraform_module_directory}" init  -upgrade -force-copy -migrate-state \
+				--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
+				--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
+				--backend-config "storage_account_name=${terraform_storage_account_name}" \
+				--backend-config "container_name=tfstate" \
+				--backend-config "key=${key}.terraform.tfstate"; then
+				return_value=$?
+				print_banner "$banner_title" "Terraform init succeeded." "success"
+
+			else
+				return_value=10
+				print_banner "$banner_title" "Terraform init failed." "error" "Terraform init return code: $return_value"
+				exit $return_value
+			fi
 		else
 			return_value=10
-			print_banner "$banner_title" "Terraform init failed." "error" "Terraform init return code: $return_value"
+			print_banner "$banner_title" "Terraform init -reconfigure failed" "error" "Terraform init return code: $return_value"
 			exit $return_value
 		fi
 	fi
