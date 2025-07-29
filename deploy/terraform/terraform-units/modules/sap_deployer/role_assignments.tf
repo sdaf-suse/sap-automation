@@ -193,3 +193,16 @@ resource "azurerm_role_assignment" "dev_center_network_contributor" {
   role_definition_name                          = "Network Contributor"
   principal_id                                  = var.infrastructure.devops.DevOpsInfrastructure_object_id
 }
+
+resource "azurerm_role_assignment" "role_assignment_terraform_executor" {
+  provider                             = azurerm.main
+  count                                = var.key_vault.enable_rbac_authorization && !var.key_vault.exists ? 1 : 0
+  scope                                = azurerm_key_vault.kv_user[0].id
+  role_definition_name                 = "Key Vault Administrator"
+  principal_id                         = data.azurerm_client_config.deployer.object_id
+  skip_service_principal_aad_check     = true
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
