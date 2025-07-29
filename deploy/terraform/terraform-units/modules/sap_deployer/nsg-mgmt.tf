@@ -24,7 +24,7 @@ resource "azurerm_network_security_group" "nsg_mgmt" {
 
 data "azurerm_network_security_group" "nsg_mgmt" {
   count                                = var.infrastructure.virtual_network.management.subnet_mgmt.exists ? 1 : 0
-  name                                 = split("/", var.infrastructure.virtual_network.management.subnet_mgmt.id)[8]
+  name                                 = split("/", var.infrastructure.virtual_network.management.subnet_mgmt.nsg.id)[8]
   resource_group_name                  = split("/", var.infrastructure.virtual_network.management.subnet_mgmt.id)[4]
 }
 
