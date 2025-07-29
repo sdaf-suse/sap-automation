@@ -621,28 +621,33 @@ else
 		print_banner "$banner_title" "The system has already been deployed and the state file is in Azure" "info"
 		echo "Terraform state file:                ${key}.terraform.tfstate"
 		if $IAC_TOOL -chdir="${terraform_module_directory}" init -reconfigure -upgrade -force-copy -input=false \
-				--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
-				--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
-				--backend-config "storage_account_name=${terraform_storage_account_name}" \
-				--backend-config "container_name=tfstate" \
-				--backend-config "key=${key}.terraform.tfstate"; then
-			if $IAC_TOOL -chdir="${terraform_module_directory}" init  -upgrade -force-copy -migrate-state \
-				--backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
-				--backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
-				--backend-config "storage_account_name=${terraform_storage_account_name}" \
-				--backend-config "container_name=tfstate" \
-				--backend-config "key=${key}.terraform.tfstate"; then
-				return_value=$?
-				print_banner "$banner_title" "Terraform init succeeded." "success"
+    --backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
+    --backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
+    --backend-config "storage_account_name=${terraform_storage_account_name}" \
+    --backend-config "container_name=tfstate" \
+    --backend-config "key=${key}.terraform.tfstate"; then
 
-			else
-				return_value=10
-				print_banner "$banner_title" "Terraform init failed." "error" "Terraform init return code: $return_value"
-				exit $return_value
-			fi
+    		# Run a second init with migrate-state to ensure proper format conversion
+    		if $IAC_TOOL -chdir="${terraform_module_directory}" init -migrate-state -upgrade \
+    		    --backend-config "subscription_id=${terraform_storage_account_subscription_id}" \
+    		    --backend-config "resource_group_name=${terraform_storage_account_resource_group_name}" \
+    		    --backend-config "storage_account_name=${terraform_storage_account_name}" \
+    		    --backend-config "container_name=tfstate" \
+    		    --backend-config "key=${key}.terraform.tfstate"; then
+
+    		    # Refresh state to ensure compatibility
+    		    $IAC_TOOL -chdir="${terraform_module_directory}" refresh
+    		    return_value=$?
+    		    print_banner "$banner_title" "OpenTofu migration succeeded." "success"
+    		else
+    		    return_value=11
+    		    print_banner "$banner_title" "OpenTofu state migration failed." "error"
+    		    exit $return_value
+    		fi
 		else
 			return_value=10
 			print_banner "$banner_title" "Terraform init -reconfigure failed" "error" "Terraform init return code: $return_value"
+			$IAC_TOOL -chdir="${terraform_module_directory}" state list 2>&1 | grep -E "(Invalid address|square brackets)"
 			exit $return_value
 		fi
 	fi
