@@ -475,7 +475,7 @@ resource "azurerm_private_endpoint" "kv_user_agent" {
                                           "-agent",
                                           var.naming.resource_suffixes.keyvault_private_link
                                         )
-  resource_group_name                  = split("/", var.additional_network_id)[4]
+  resource_group_name                  = data.azurerm_resource_group.agent_rg[0].name
   location                             = data.azurerm_resource_group.agent_rg[0].location
   subnet_id                            = data.azurerm_subnet.agent_subnet[0].id
 
