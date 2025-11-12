@@ -13,20 +13,19 @@
 # |                                                                           |
 # +------------------------------------4--------------------------------------*/
 
-db_hosts:                   "{{ query('inventory_hostnames', '{{ sap_sid | upper }}_DB') }}"
-mm_hosts:                   "{{ query('inventory_hostnames', '{{ sap_sid | upper }}_OBSERVER_DB') }}"
+db_hosts:                              "{{ query('inventory_hostnames', '{{ sap_sid | upper }}_DB') }}"
+mm_hosts:                              "{{ query('inventory_hostnames', '{{ sap_sid | upper }}_OBSERVER_DB') }}"
 
 cluster_totem:
   token:                               30000
   retransmits:                         10
-  join:                                 60
+  join:                                60
   consensus:                           36000
-  max_messages:                         20
+  max_messages:                        20
 
 cluster_quorum:
-  # expected_votes:                       "{{ (( ansible_play_hosts_all | length ) / 2 ) | int + 1 }}"
-  expected_votes:                       "{{ ansible_play_hosts_all | length }}"
-  two_node:                             0
+  expected_votes:                      "{{ ansible_play_hosts_all | length }}"
+  two_node:                            0
 
 # /*---------------------------------------------------------------------------8
 # | These are the default timeouts used for the SAP HANA OS clustering.        |
@@ -36,19 +35,19 @@ cluster_quorum:
 # +------------------------------------4--------------------------------------*/
 
 cluster_sap_hana_timeouts:
-  start:                              3600
-  stop:                               3600
-  monitor_master:                     700
-  monitor_slave:                      700
-  promote:                            3600
-  demote:                             3600
+  start:                               3600
+  stop:                                3600
+  monitor_master:                      700
+  monitor_slave:                       700
+  promote:                             3600
+  demote:                              3600
 
 cluster_status_cmd:
-  RedHat:                             "pcs status --full"
-  Suse:                               "crm status full"
+  RedHat:                              "pcs status --full"
+  Suse:                                "crm status full"
 
-cluster_status_report_wait_in_s:      60
-cluster_name:                         db{{ sid | lower }}
+cluster_status_report_wait_in_s:       60
+cluster_name:                          db{{ sid | lower }}
 
 # /*---------------------------------------------------------------------------8
 # |                      HANA utility commands                                 |
@@ -67,6 +66,7 @@ sbdMap: []
 # RHEL 8.6: resource-agents-4.9.0-16.9
 # RHEL 8.8 and newer: resource-agents-4.9.0-40.1
 # RHEL 9.0 and newer: resource-agents-cloud-4.10.0-34.2
+# RHEL 10.0 and newer resource-agents-cloud-4.16.0
 # SLES
 # SLES 12 SP5: resource-agents-4.3.018.a7fb5035-3.98.1
 # SLES 15 SP1: resource-agents-4.3.0184.6ee15eb2-150100.4.72.1
@@ -99,6 +99,12 @@ package_versions:
   redhat9.4:
     - {name: "pacemaker",               version: "2.0.5",   compare_operator: ">=", version_type: "loose"}
     - {name: "resource-agents-cloud",   version: "4.10.0",  compare_operator: ">=", version_type: "loose"}
+  redhat9.6:
+    - {name: "pacemaker",               version: "2.0.5",   compare_operator: ">=", version_type: "loose"}
+    - {name: "resource-agents-cloud",   version: "4.10.0",  compare_operator: ">=", version_type: "loose"}
+  redhat10.0:
+    - {name: "pacemaker",               version: "3.0.0",   compare_operator: ">=", version_type: "loose"}
+    - {name: "resource-agents-cloud",   version: "4.16.0",  compare_operator: ">=", version_type: "loose"}
   sles_sap12.5:
     - {name: "pacemaker",               version: "1.1.23",  compare_operator: ">=", version_type: "loose"}
     - {name: "resource-agents",         version: "4.3.018", compare_operator: ">=", version_type: "loose"}

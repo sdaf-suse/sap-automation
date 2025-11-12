@@ -32,6 +32,8 @@ repos:
   redhat9.0:
   redhat9.2:
   redhat9.4:
+  redhat9.6:
+  redhat10.0:
 
   # SLES
   sles12.3:
@@ -49,9 +51,8 @@ repos:
   sles15.4:
   sles15.5:
   sles15.6:
-  sles15.7:
-  # Oracle
 
+  # Oracle
   # Adding the entries for Oracle-Linux for testing. cat /etc/oracle-release is the command to get the os version info in Oracle linux.
   oraclelinux8.1:
   oraclelinux8.2:
@@ -63,3 +64,7 @@ repos:
   oraclelinux8.8:
   oraclelinux8.9:
   oraclelinux8.10:
+  oraclelinux9.0:
+  oraclelinux9.2:
+  oraclelinux9.4:
+  oraclelinux9.6:
