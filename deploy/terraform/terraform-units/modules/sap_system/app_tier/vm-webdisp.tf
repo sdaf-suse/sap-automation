@@ -34,11 +34,11 @@ resource "azurerm_network_interface" "web" {
                                               null) : (
                                               var.infrastructure.virtual_networks.sap.subnet_web.defined ?
                                               cidrhost(
-                                                local.web_subnet_prefix,
+                                                var.infrastructure.virtual_networks.sap.subnet_web.prefix,
                                                 (tonumber(count.index) + local.ip_offsets.web_vm + pub.value.offset)
                                               ) :
                                               cidrhost(
-                                                local.application_subnet_prefix,
+                                                var.infrastructure.virtual_networks.sap.subnet_app.prefix,
                                                 (tonumber(count.index) * -1 + local.ip_offsets.web_vm + pub.value.offset)
                                               )
                                             )
@@ -74,7 +74,7 @@ resource "azurerm_network_interface_application_security_group_association" "web
 
 resource "azurerm_network_interface" "web_admin" {
   provider                             = azurerm.main
-  count                                = local.enable_deployment && var.application_tier.dual_nics && length(try(var.admin_subnet.id, "")) > 0 ? (
+  count                                = local.enable_deployment && var.application_tier.dual_network_interfaces && length(try(var.admin_subnet.id, "")) > 0 ? (
                                            local.webdispatcher_count) : (
                                            0
                                          )
@@ -125,13 +125,12 @@ resource "azurerm_linux_virtual_machine" "web" {
   location                             = var.resource_group[0].location
   resource_group_name                  = var.resource_group[0].name
 
-  proximity_placement_group_id         = var.application_tier.web_use_ppg ? (
+  proximity_placement_group_id         = var.application_tier.web_use_ppg && !var.application_tier.web_use_avset ? (
                                            local.web_zonal_deployment ? var.ppg[count.index % max(local.web_zone_count, 1)] : var.ppg[0]) : (
                                            null
                                          )
-
   //If more than one servers are deployed into a single zone put them in an availability set and not a zone
-  availability_set_id                  = local.use_web_avset ? (
+  availability_set_id                  = var.application_tier.web_use_avset ? (
                                            azurerm_availability_set.web[count.index % max(length(azurerm_availability_set.web), 1)].id
                                            ) : (
                                            null
@@ -146,7 +145,7 @@ resource "azurerm_linux_virtual_machine" "web" {
   //If length of zones > 1 distribute servers evenly across zones
   zone                                 = local.use_web_avset ? null : try(local.web_zones[count.index % max(local.web_zone_count, 1)], null)
 
-  network_interface_ids                = var.application_tier.dual_nics ? (
+  network_interface_ids                = var.application_tier.dual_network_interfaces ? (
                                            var.options.legacy_nic_order ? (
                                              [
                                                azurerm_network_interface.web_admin[count.index].id,
@@ -177,6 +176,9 @@ resource "azurerm_linux_virtual_machine" "web" {
 # patch_mode                           = var.infrastructure.patch_mode
 
   tags                                 = merge(var.application_tier.web_tags, var.tags)
+
+  # Set the disc controller type, default SCSI
+  disk_controller_type                 = var.infrastructure.disk_controller_type_app_tier
 
   encryption_at_host_enabled           = var.infrastructure.encryption_at_host_enabled
 
@@ -279,13 +281,12 @@ resource "azurerm_windows_virtual_machine" "web" {
   location                             = var.resource_group[0].location
   resource_group_name                  = var.resource_group[0].name
 
-  proximity_placement_group_id         = var.application_tier.web_use_ppg ? (
+  proximity_placement_group_id         = var.application_tier.web_use_ppg && !var.application_tier.web_use_avset ? (
                                            local.web_zonal_deployment ? var.ppg[count.index % max(local.web_zone_count, 1)] : var.ppg[0]) : (
                                            null
                                          )
-
   //If more than one servers are deployed into a single zone put them in an availability set and not a zone
-  availability_set_id                  = local.use_web_avset ? (
+  availability_set_id                  = var.application_tier.web_use_avset ? (
                                            azurerm_availability_set.web[count.index % max(length(azurerm_availability_set.web), 1)].id
                                            ) : (
                                            null
@@ -298,7 +299,7 @@ resource "azurerm_windows_virtual_machine" "web" {
   patch_mode                                             = var.infrastructure.patch_mode == "ImageDefault" ? "Manual" : var.infrastructure.patch_mode
   patch_assessment_mode                                  = var.infrastructure.patch_assessment_mode
   bypass_platform_safety_checks_on_user_schedule_enabled = var.infrastructure.patch_mode != "AutomaticByPlatform" ? false : true
-  enable_automatic_updates                               = !(var.infrastructure.patch_mode == "ImageDefault")
+  automatic_updates_enabled                              = !(var.infrastructure.patch_mode == "ImageDefault")
 
   //If length of zones > 1 distribute servers evenly across zones
   zone                                 = local.use_web_avset ? (
@@ -306,7 +307,7 @@ resource "azurerm_windows_virtual_machine" "web" {
                                            try(local.web_zones[count.index % max(local.web_zone_count, 1)], null)
                                          )
 
-  network_interface_ids                = var.application_tier.dual_nics ? (
+  network_interface_ids                = var.application_tier.dual_network_interfaces ? (
                                            var.options.legacy_nic_order ? (
                                              [
                                                azurerm_network_interface.web_admin[count.index].id,
@@ -426,8 +427,8 @@ resource "azurerm_managed_disk" "web" {
 
   zone                                 = !local.use_web_avset ? (
                                            upper(var.application_tier.web_os.os_type) == "LINUX" ? (
-                                             azurerm_linux_virtual_machine.web[local.web_data_disks[count.index].vm_index].zone) : (
-                                             azurerm_windows_virtual_machine.web[local.web_data_disks[count.index].vm_index].zone
+                                             try(azurerm_linux_virtual_machine.web[local.web_data_disks[count.index].vm_index].zone, null)) : (
+                                             try(azurerm_windows_virtual_machine.web[local.web_data_disks[count.index].vm_index].zone, null)
                                            )) : (
                                            null
                                          )
@@ -520,7 +521,7 @@ resource "azurerm_virtual_machine_extension" "configure_ansible_web" {
 
 #######################################4#######################################8
 #                                                                              #
-#                   Create the Wewb Load Balancer                               #
+#                   Create the Web Load Balancer                               #
 #                                                                              #
 #######################################4#######################################8
 
@@ -614,7 +615,7 @@ resource "azurerm_lb_rule" "web" {
   backend_port                         = 0
   frontend_ip_configuration_name       = azurerm_lb.web[0].frontend_ip_configuration[0].name
   backend_address_pool_ids             = [azurerm_lb_backend_address_pool.web[0].id]
-  enable_floating_ip                   = false
+  floating_ip_enabled                  = false
   probe_id                             = azurerm_lb_probe.web[0].id
 }
 

@@ -166,6 +166,8 @@ resource "local_file" "ansible_inventory_new_yml" {
 
                     created_resource_group_name            = var.created_resource_group_name
                     created_resource_group_subscription_id = var.created_resource_group_subscription_id
+                    app_use_nvme_disks                     = upper(var.infrastructure.disk_controller_type_app_tier) == "NVME"
+                    db_use_nvme_disks                      = upper(var.infrastructure.disk_controller_type_database_tier) == "NVME"
 
     }
   )
@@ -232,7 +234,7 @@ resource "local_file" "sap-parameters_yml" {
                                               format("sap_trans:                     %s", var.sap_transport)) : (
                                               ""
                                             )
-              asd_disks                   = concat(var.scs_shared_disks, var.database_shared_disks)
+              asd_disks                   = concat(var.scs_shared_disks, var.database_shared_disks, var.observer_shared_disks)
               scale_out                   = var.scale_out
               scale_out_no_standby_role   = var.scale_out_no_standby_role
               scs_cluster_loadbalancer_ip = try(format("%s/%s", var.scs_cluster_loadbalancer_ip, var.app_subnet_netmask), "")
@@ -248,9 +250,9 @@ resource "local_file" "sap-parameters_yml" {
               sid                         = var.sap_sid,
               subnet_cidr_anf             = var.subnet_cidr_anf,
               subnet_cidr_app             = var.subnet_cidr_app,
-              subnet_cidr_client          = var.subnet_cidr_client
-              subnet_cidr_db              = var.subnet_cidr_db
-              subnet_cidr_storage         = var.subnet_cidr_storage,
+              subnet_cidr_client          = trimspace(coalesce(var.subnet_cidr_client," ")),
+              subnet_cidr_db              = trimspace(coalesce(var.subnet_cidr_db," ")),
+              subnet_cidr_storage         = trimspace(coalesce(var.subnet_cidr_storage," ")),
               upgrade_packages            = var.upgrade_packages ? "true" : "false"
               use_msi_for_clusters        = var.use_msi_for_clusters
               usr_sap                     = length(var.usr_sap) > 1 ? (
@@ -265,6 +267,10 @@ resource "local_file" "sap-parameters_yml" {
               enable_sap_cal              = var.enable_sap_cal
               calapi_kv                   = var.calapi_kv
               sap_cal_product_name        = var.sap_cal_product_name
+              single_server               = length(var.webdispatcher_server_ips) + length(var.application_server_ips) + length(var.scs_server_ips) + length(var.database_server_ips) == 1 ? (
+                                            true) : (
+                                            false
+                                          )
 
     }
   )

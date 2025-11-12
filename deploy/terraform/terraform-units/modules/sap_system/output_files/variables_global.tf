@@ -75,10 +75,11 @@ variable "dns_zone_names"                       {
                                                   description = "Private DNS zone names"
                                                   type        = map(string)
                                                   default = {
-                                                              "file_dns_zone_name"   = "privatelink.file.core.windows.net"
-                                                              "blob_dns_zone_name"   = "privatelink.blob.core.windows.net"
-                                                              "table_dns_zone_name"  = "privatelink.table.core.windows.net"
-                                                              "vault_dns_zone_name"  = "privatelink.vaultcore.azure.net"
+                                                              "file_dns_zone_name"      = "privatelink.file.core.windows.net"
+                                                              "blob_dns_zone_name"      = "privatelink.blob.core.windows.net"
+                                                              "table_dns_zone_name"     = "privatelink.table.core.windows.net"
+                                                              "vault_dns_zone_name"     = "privatelink.vaultcore.azure.net"
+                                                              "appconfig_dns_zone_name" = "privatelink.azconfig.io"
                                                             }
                                                 }
 variable "dns"                                  {
@@ -126,6 +127,7 @@ variable "management_dns_subscription_id"       {
                                                   default     = null
                                                   type        = string
                                                 }
+
 variable "naming"                               { description = "Defines the names for the resources" }
 variable "NFS_provider"                         {
                                                   description = "Defines the NFS provider"
@@ -133,6 +135,7 @@ variable "NFS_provider"                         {
                                                 }
 variable "observer_ips"                         { description = "List of NICs for the Observer VMs" }
 variable "observer_vms"                         { description = "List of Observer VMs" }
+variable "observer_shared_disks"                { description = "Observer Azure Shared Disk" }
 variable "pas_instance_number"                  {
                                                   description = "Instance number for Primary Application Server"
                                                   default     = "00"

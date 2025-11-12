@@ -34,9 +34,9 @@ locals {
   region                               = var.infrastructure.region
   sid                                  = upper(var.sap_sid)
   prefix                               = trimspace(var.naming.prefix.SDU)
-  resource_group_exists                = length(try(var.infrastructure.resource_group.arm_id, "")) > 0
+  resource_group_exists                = length(try(var.infrastructure.resource_group.id, "")) > 0
   resourcegroup_name                   = local.resource_group_exists ? (
-                                          try(split("/", var.infrastructure.resource_group.arm_id)[4], "")) : (
+                                          try(split("/", var.infrastructure.resource_group.id)[4], "")) : (
                                           coalesce(
                                             try(var.infrastructure.resource_group.name, ""),
                                             format("%s%s%s",
@@ -54,7 +54,7 @@ locals {
   use_ANF                              = try(var.database.use_ANF, false)
   //Scalout subnet is needed if ANF is used and there are more than one hana node
   dbnode_per_site                      = length(try(var.database.dbnodes, [{}]))
-  enable_storage_subnet                = var.database.scale_out && length(try(var.storage_subnet.id,""))>0
+  enable_storage_subnet                = var.database.scale_out && length(try(var.storage_subnet_id,""))>0
 
   // Availability Set
   availabilityset_arm_ids              = try(var.database.avset_arm_ids, [])
@@ -110,8 +110,8 @@ locals {
 
   db_sizing_key                        = try(var.database.db_sizing_key, "Default")
 
-  db_sizing                            = local.enable_deployment ? lookup(local.sizes.db, local.db_sizing_key).storage : []
-  db_size                              = local.enable_deployment ? lookup(local.sizes.db, local.db_sizing_key).compute : {}
+  db_sizing                            = local.enable_deployment ? try(lookup(local.sizes.db, local.db_sizing_key, {}).storage, []) : []
+  db_size                              = local.enable_deployment ? try(lookup(local.sizes.db, local.db_sizing_key, {}).compute, {}) : {}
 
   hdb_vm_sku                           = length(var.database.database_vm_sku) > 0 ? var.database.database_vm_sku : try(local.db_size.vm_size, "Standard_E16_v3")
 
@@ -170,6 +170,7 @@ locals {
                                           null
                                         )
 
+
   standard_ips                        = [
                                           {
                                             name = format("%s%s%s%s",
@@ -178,7 +179,7 @@ locals {
                                               var.naming.separator,
                                               local.resource_suffixes.db_alb_feip
                                             )
-                                            subnet_id = var.database.scale_out ? (
+                                            subnet_id = var.database.scale_out && var.database_dual_network_interfaces && var.database.high_availability ? (
                                               try(
                                                 var.admin_subnet.id,
                                                 var.landscape_tfstate.admin_subnet_id
@@ -190,7 +191,7 @@ locals {
                                               var.database.use_DHCP ? (
                                                 null) : (
                                                 cidrhost(
-                                                  var.database.scale_out ? var.admin_subnet.address_prefixes[0] : var.db_subnet.address_prefixes[0],
+                                                  var.database.scale_out && var.database_dual_network_interfaces && var.database.high_availability ? var.admin_subnet.address_prefixes[0] : var.db_subnet.address_prefixes[0],
                                                   local.hdb_ip_offsets.hdb_lb
                                               ))
                                             )
@@ -203,7 +204,7 @@ locals {
                                               var.naming.separator,
                                               try(local.resource_suffixes.db_rlb_feip, "dbRlb-feip")
                                             )
-                                            subnet_id = var.database.scale_out ? (
+                                            subnet_id = var.database.scale_out && var.database_dual_network_interfaces  ? (
                                               try(
                                                 var.admin_subnet.id,
                                                 var.landscape_tfstate.admin_subnet_id
@@ -215,7 +216,7 @@ locals {
                                               var.database.use_DHCP ? (
                                                 null) : (
                                                 cidrhost(
-                                                  var.database.scale_out ? var.admin_subnet.address_prefixes[0] :  var.db_subnet.address_prefixes[0],
+                                                  var.database.scale_out && var.database_dual_network_interfaces ? var.admin_subnet.address_prefixes[0] :  var.db_subnet.address_prefixes[0],
                                                   local.hdb_ip_offsets.hdb_lb + 1
                                               ))
                                             )
@@ -264,7 +265,7 @@ locals {
                                                  disk_iops_read_write      = try(storage_type.disk_iops_read_write, null)
                                                  disk_mbps_read_write      = try(storage_type.disk_mbps_read_write, null)
                                                  caching                   = storage_type.caching,
-                                                 write_accelerator_enabled = storage_type.write_accelerator
+                                                 write_accelerator_enabled = try(storage_type.write_accelerator, false)
                                                  type                      = storage_type.name
                                                  lun                       = storage_type.lun_start + idx
                                                }
@@ -298,7 +299,7 @@ locals {
                                                  disk_iops_read_write      = try(storage_type.disk_iops_read_write, null)
                                                  disk_mbps_read_write      = try(storage_type.disk_mbps_read_write, null)
                                                  caching                   = storage_type.caching,
-                                                 write_accelerator_enabled = storage_type.write_accelerator
+                                                 write_accelerator_enabled = try(storage_type.write_accelerator, false)
                                                  type                      = storage_type.name
                                                  lun                       = storage_type.lun_start + idx
                                                }
@@ -486,7 +487,7 @@ locals {
   observer_custom_image_id             = local.enable_deployment ? local.hdb_os.source_image_id : ""
   observer_os                          = local.enable_deployment ? local.hdb_os : null
 
-  site_information                     = flatten(
+  site_information                    = flatten(
                                            [
                                             for idx, server_count in range(var.database_server_count) :
                                               [
@@ -514,5 +515,25 @@ locals {
                                               for i in range(var.database_server_count) : azurerm_linux_virtual_machine.vm_dbnode[i].id
                                             ] : []
                                           ) : []
+
+
+  // Network interface selection for load balancer backend pool association
+  // For scale-out scenario admin nic is the primary IP configuration on the VM
+  // and is used for cluster creation. We use the admin nic for LB if dual nic
+  // is enabled and HA is enabled, otherwise we use the db nic.
+  use_admin_nic_for_lb                = var.database.scale_out && var.database_dual_network_interfaces && var.database.high_availability
+
+  db_lb_network_interface_ids         = local.use_admin_nic_for_lb ? (
+                                          azurerm_network_interface.nics_dbnodes_admin[*].id
+                                        ) : (
+                                          azurerm_network_interface.nics_dbnodes_db[*].id
+                                        )
+
+  db_lb_ip_configuration_names        = local.use_admin_nic_for_lb ? (
+                                          azurerm_network_interface.nics_dbnodes_admin[*].ip_configuration[0].name
+                                        ) : (
+                                          azurerm_network_interface.nics_dbnodes_db[*].ip_configuration[0].name
+                                        )
+
 
 }

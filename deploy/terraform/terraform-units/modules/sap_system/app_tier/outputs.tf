@@ -76,7 +76,7 @@ output "fileshare_loadbalancer_ip"     {
 output "app_subnet_netmask"            {
                                          description = "Application subnet netmask"
                                          value       = local.enable_deployment ? (
-                                                         local.application_subnet_exists ? (
+                                                         var.infrastructure.virtual_networks.sap.subnet_app.exists || var.infrastructure.virtual_networks.sap.subnet_app.exists_in_workload ? (
                                                            split("/", data.azurerm_subnet.subnet_sap_app[0].address_prefixes[0])[1]) : (
                                                            split("/", azurerm_subnet.subnet_sap_app[0].address_prefixes[0])[1]
                                                          )) : (
@@ -211,7 +211,7 @@ output "webdispatcher_server_vm_names" {
 output "dns_info_vms"                  {
                                          description = "DNS information for the application tier"
                                          value       = local.enable_deployment ? (
-                                                         var.application_tier.dual_nics ? (
+                                                         var.application_tier.dual_network_interfaces ? (
                                                            zipmap(
                                                              compact(concat(
                                                                slice(local.full_appserver_names, 0, length(azurerm_linux_virtual_machine.app) + length(azurerm_windows_virtual_machine.app)),
@@ -324,9 +324,9 @@ output "scs_kdump_disks"               {
                                        }
 
 output "subnet_cidr_app"             {
-                                          description = "Storage subnet prefix"
+                                          description = "App subnet prefix"
                                           value       = local.enable_deployment ? (
-                                                          local.application_subnet_exists ? (
+                                                          var.infrastructure.virtual_networks.sap.subnet_app.exists || var.infrastructure.virtual_networks.sap.subnet_app.exists_in_workload ? (
                                                             data.azurerm_subnet.subnet_sap_app[0].address_prefixes[0]) : (
                                                             azurerm_subnet.subnet_sap_app[0].address_prefixes[0]
                                                           )) : (
