@@ -13,8 +13,8 @@ parameters:
     type:                              string
     default:                           DEV-WEEU-SAP01-X00
 
-  - name:                              environment
-    displayName:                       Workload Environment (DEV, QA, PRD, ...)
+  - name:                              workload_zone_name
+    displayName:                       Workload Zone Name (DEV-WEEU-SAP01-X00)
     type:                              string
     default:                           DEV
 
@@ -31,13 +31,13 @@ parameters:
     type:                              boolean
 
 stages:
-  - stage: Deploy_SAP_infrastructure
-    condition: and(not(failed()), not(canceled()))
+  - stage:                             Deploy_SAP_infrastructure
+    condition:                         and(not(failed()), not(canceled()))
     variables:
       - template:                      variables/03-sap-system-deployment-variables.yaml
         parameters:
           sap_system:                  ${{ parameters.sap_system }}
-          environment:                 ${{ parameters.environment }}
+          workload_zone_name:          ${{ parameters.workload_zone_name }}
           test:                        ${{ parameters.test }}
     displayName:                       Deploy SAP infrastructure
     jobs:
@@ -48,6 +48,10 @@ stages:
         steps:
           - template:                  templates\download.yaml
           - task:                      PostBuildCleanup@4
+          - task:                      TerraformInstaller@1
+            displayName:               Install Terraform
+            inputs:
+              terraformVersion:        latest
           - task:                      Bash@3
             inputs:
               targetType:              'filePath'
@@ -56,18 +60,20 @@ stages:
               workingDirectory:        "$(System.DefaultWorkingDirectory)"
             displayName:               Deploy_SAP_infrastructure
             env:
-              CONFIG_REPO_PATH:         ${{ parameters.config_repo_path }}/$(Deployment_Configuration_Path)
-              LOGON_USING_SPN:          $(Logon_Using_SPN)
-              AZURE_DEVOPS_EXT_PAT:     $(System.AccessToken)
-              SAP_AUTOMATION_REPO_PATH: ${{ parameters.sap_automation_repo_path }}
-              SYSTEM_ACCESSTOKEN:       $(System.AccessToken)
-              TEST_ONLY:                ${{ parameters.test }}
-              TF_IN_AUTOMATION:         true
-              TF_LOG:                   $(TF_LOG)
-              USE_MSI:                  $(Use_MSI)
-              WL_ARM_CLIENT_ID:         $(ARM_CLIENT_ID)
-              WL_ARM_CLIENT_SECRET:     $(ARM_CLIENT_SECRET)
-              WL_ARM_SUBSCRIPTION_ID:   $(ARM_SUBSCRIPTION_ID)
-              WL_ARM_TENANT_ID:         $(ARM_TENANT_ID)
-
-
+              ARM_CLIENT_ID:                   $(ARM_CLIENT_ID)
+              ARM_CLIENT_SECRET:               $(ARM_CLIENT_SECRET)
+              ARM_SUBSCRIPTION_ID:             $(ARM_SUBSCRIPTION_ID)
+              ARM_TENANT_ID:                   $(ARM_TENANT_ID)
+              ARM_USE_MSI:                     $(ARM_USE_MSI)
+              AZURE_DEVOPS_EXT_PAT:            $(System.AccessToken)
+              CONFIG_REPO_PATH:                ${{ parameters.config_repo_path }}/$(Deployment_Configuration_Path)
+              DEPLOYER_KEYVAULT:               $(DEPLOYER_KEYVAULT)
+              KEYVAULT:                        $(KEYVAULT)
+              TERRAFORM_STATE_STORAGE_ACCOUNT: $(TERRAFORM_STATE_STORAGE_ACCOUNT)
+              LOGON_USING_SPN:                 $(Logon_Using_SPN)
+              SAP_AUTOMATION_REPO_PATH:        ${{ parameters.sap_automation_repo_path }}
+              SYSTEM_ACCESSTOKEN:              $(System.AccessToken)
+              TEST_ONLY:                       ${{ parameters.test }}
+              TF_IN_AUTOMATION:                true
+              TF_LOG:                          $(TF_LOG)
+              USE_MSI:                         $(Use_MSI)
