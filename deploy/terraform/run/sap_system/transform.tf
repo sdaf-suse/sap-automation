@@ -7,19 +7,22 @@ locals {
   enable_app_tier_deployment           = var.enable_app_tier_deployment && try(var.application_tier.enable_deployment, true)
 
   temp_infrastructure                  = {
-                                            environment                      = coalesce(var.environment, try(var.infrastructure.environment, ""))
-                                            region                           = lower(coalesce(var.location, try(var.infrastructure.region, "")))
-                                            codename                         = try(var.codename, try(var.infrastructure.codename, ""))
-                                            tags                             = try(merge(var.resourcegroup_tags, try(var.infrastructure.tags, {})), {})
-                                            use_app_proximityplacementgroups = var.use_app_proximityplacementgroups
-                                            deploy_monitoring_extension      = var.deploy_monitoring_extension
-                                            deploy_defender_extension        = var.deploy_defender_extension
-                                            patch_mode                       = var.patch_mode
-                                            patch_assessment_mode            = var.patch_assessment_mode
-                                            platform_updates                 = var.platform_updates
-                                            shared_access_key_enabled        = var.shared_access_key_enabled
-                                            shared_access_key_enabled_nfs    = var.shared_access_key_enabled_nfs
-                                            encryption_at_host_enabled       = var.encryption_at_host_enabled
+                                            environment                        = coalesce(var.environment, try(var.infrastructure.environment, ""))
+                                            region                             = lower(coalesce(var.location, try(var.infrastructure.region, "")))
+                                            codename                           = try(var.codename, try(var.infrastructure.codename, ""))
+                                            tags                               = try(merge(var.resourcegroup_tags, try(var.infrastructure.tags, {})), {})
+                                            use_app_proximityplacementgroups   = var.use_app_proximityplacementgroups
+                                            deploy_monitoring_extension        = var.deploy_monitoring_extension
+                                            deploy_defender_extension          = var.deploy_defender_extension
+                                            patch_mode                         = var.patch_mode
+                                            patch_assessment_mode              = var.patch_assessment_mode
+                                            platform_updates                   = var.platform_updates
+                                            shared_access_key_enabled          = var.shared_access_key_enabled
+                                            shared_access_key_enabled_nfs      = var.shared_access_key_enabled_nfs
+                                            disk_controller_type_app_tier      = var.disk_controller_type_app_tier
+                                            disk_controller_type_database_tier = var.disk_controller_type_database_tier
+                                            encryption_at_host_enabled         = var.encryption_at_host_enabled
+                                            storage_account_replication_type   = var.storage_account_replication_type
                                          }
 
 
@@ -86,18 +89,39 @@ locals {
   db_tags                               = var.database_tags
 
   databases_temp                       = {
-                                           database_cluster_type           = var.database_cluster_type
-                                           database_server_count           = var.database_high_availability ? 2 * var.database_server_count : var.database_server_count
-                                           database_vm_sku                 = var.database_vm_sku
-                                           db_sizing_key                   = coalesce(var.db_sizing_dictionary_key, var.database_size, "Optimized")
-                                           deploy_v1_monitoring_extension  = var.deploy_v1_monitoring_extension
-                                           dual_nics                       = var.database_dual_nics
-                                           high_availability               = var.database_high_availability
                                            database_cluster_disk_lun       = var.database_cluster_disk_lun
                                            database_cluster_disk_size      = var.database_cluster_disk_size
                                            database_cluster_disk_type      = var.database_cluster_disk_type
-                                           observer_vm_ips                 = var.observer_nic_ips
+                                           database_cluster_type           = var.database_cluster_type
+                                           database_server_count           = var.database_high_availability ? 2 * var.database_server_count : var.database_server_count
+                                           database_hana_use_saphanasr_angi =  upper(var.database_platform) == "HANA" ? (
+                                                                                 var.database_high_availability ? (
+                                                                                     var.use_sles_saphanasr_angi
+                                                                                     ) : (
+                                                                                       false
+                                                                                     )
+                                                                                 ) : (
+                                                                                   false
+                                                                                 )
 
+                                           database_vm_sku                 = var.database_vm_sku
+                                           db_sizing_key                   = coalesce(var.db_sizing_dictionary_key, var.database_size, "Optimized")
+                                           deploy_v1_monitoring_extension  = var.deploy_v1_monitoring_extension
+                                           disk_controller_type_database_tier   = var.disk_controller_type_database_tier
+                                           dual_network_interfaces         = var.database_dual_nics
+                                           high_availability               = var.database_high_availability
+                                           instance                        = {
+                                                                                sid = upper(coalesce(
+                                                                                  var.database_sid,
+                                                                                  upper(var.database_platform) == "HANA" ? (
+                                                                                    "HDB"
+                                                                                    ) : (
+                                                                                  substr(var.database_platform, 0, 3))
+                                                                                ))
+                                                                                number = coalesce(var.database_instance_number,"00")
+                                                                              }
+
+                                           observer_vm_ips                 = var.observer_nic_ips
                                            platform                        = var.database_platform
                                            use_ANF                         = var.database_HANA_use_scaleout_scenario || try(var.databases[0].use_ANF, false)
                                            use_avset                       = var.database_server_count == 0 || var.use_scalesets_for_deployment || length(var.database_vm_zones) > 0 || var.database_platform == "NONE" ? (
@@ -113,15 +137,6 @@ locals {
                                            scale_out                       = var.database_HANA_use_scaleout_scenario
                                            stand_by_node_count             = var.stand_by_node_count
                                            zones                           = var.database_vm_zones
-                                           database_hana_use_saphanasr_angi =  upper(var.database_platform) == "HANA" ? (
-                                                                                 var.database_high_availability ? (
-                                                                                     var.use_sles_saphanasr_angi
-                                                                                     ) : (
-                                                                                       false
-                                                                                     )
-                                                                                 ) : (
-                                                                                   false
-                                                                                 )
                                          }
 
   db_os                             = {
@@ -161,21 +176,6 @@ locals {
   db_os_specified                   = (length(local.db_os.source_image_id) + length(local.db_os.publisher)) > 0
   db_sid_specified                  = (length(var.database_sid) + length(try(var.databases[0].sid, ""))) > 0
 
-  instance                          = {
-                                        sid = upper(try(coalesce(
-                                           var.database_sid,
-                                           try(var.databases[0].sid, "")),
-                                           upper(var.database_platform) == "HANA" ? (
-                                             "HDB"
-                                             ) : (
-                                           substr(var.database_platform, 0, 3))
-                                        ))
-                                        number = upper(local.databases_temp.platform) == "HANA" ? (
-                                           var.database_instance_number
-                                           ) : (
-                                           "00"
-                                          )
-                                       }
 
   app_authentication                = {
                                         type     = var.app_tier_authentication_type
@@ -192,7 +192,7 @@ locals {
                                         sid                             = var.sid
                                         enable_deployment               = local.enable_app_tier_deployment
                                         use_DHCP                        = var.app_tier_use_DHCP
-                                        dual_nics                       = var.app_tier_dual_nics
+                                        dual_network_interfaces         = var.app_tier_dual_nics
                                         vm_sizing_dictionary_key        = coalesce(var.app_tier_sizing_dictionary_key, var.application_size, "Optimized")
                                         app_instance_number             = coalesce(var.app_instance_number, "00")
                                         application_server_count        = local.enable_app_tier_deployment ? (
@@ -247,7 +247,7 @@ locals {
                                                                           )
                                         web_instance_number             = var.web_instance_number
                                         web_sid                         = upper(var.web_sid)
-                                        web_sku                         = try(coalesce(var.webdispatcher_server_sku, var.application_tier.web_sku), "")
+                                        web_sku                         = local.enable_app_tier_deployment ? trimspace(coalesce(var.webdispatcher_server_sku, var.application_server_sku, " ")) : ""
                                         web_use_ppg                     = (var.webdispatcher_server_count) > 0 ? var.use_scalesets_for_deployment ? (
                                                                             false) : (
                                                                             var.webdispatcher_server_use_ppg
@@ -260,6 +260,7 @@ locals {
 
                                         deploy_v1_monitoring_extension  = var.deploy_v1_monitoring_extension
                                         user_assigned_identity_id       = var.user_assigned_identity_id
+                                        disk_controller_type_app_tier   = var.disk_controller_type_app_tier
                                       }
 
   app_tags                          = var.application_server_tags
@@ -343,7 +344,7 @@ locals {
                                          }
 
   app_nic_ips                          = distinct(var.application_server_app_nic_ips)
-  app_nic_secondary_ips                = distinct(var.application_server_app_nic_ips)
+  app_nic_secondary_ips                = distinct(var.application_server_nic_secondary_ips)
   app_admin_nic_ips                    = distinct(var.application_server_admin_nic_ips)
 
   scs_nic_ips                          = distinct(var.scs_server_app_nic_ips)
@@ -358,93 +359,94 @@ locals {
   subnet_admin_nsg_arm_id              = try(coalesce(var.admin_subnet_nsg_arm_id, data.terraform_remote_state.landscape.outputs.admin_nsg_id), "")
 
   subnet_admin                         = {
-                                            "name"    = length(local.subnet_admin_arm_id) > 0 ? (
-                                                           split("/",local.subnet_admin_arm_id)[10]) : (
-                                                           var.admin_subnet_name),
-                                            "arm_id"  = local.subnet_admin_arm_id
-                                            "prefix"  = length(local.subnet_admin_arm_id) > 0 ? "" : var.admin_subnet_address_prefix
-                                            "defined" = length(var.admin_subnet_address_prefix) > 0
-                                            "nsg" = {
-                                                        "name"    = length(local.subnet_admin_nsg_arm_id) > 0 ? (
-                                                                      split("/",local.subnet_admin_nsg_arm_id)[8]) : (
-                                                                      var.admin_subnet_nsg_name),
-                                                        "arm_id"  = local.subnet_admin_nsg_arm_id
-                                                      }
+                                            name                   = var.admin_subnet_name
+                                            id                     = var.admin_subnet_arm_id
+                                            exists                 = length(var.admin_subnet_arm_id) > 1
+                                            prefix                 = var.admin_subnet_address_prefix
+                                            defined                = length(var.admin_subnet_address_prefix) > 0
+                                            exists_in_workload     = length(try(data.terraform_remote_state.landscape.outputs.admin_subnet_id, "")) > 0
+                                            id_in_workload         = data.terraform_remote_state.landscape.outputs.admin_subnet_id
+                                            nsg                    = {
+                                                                        name               = var.admin_subnet_nsg_name
+                                                                        id                 = var.admin_subnet_nsg_arm_id
+                                                                        exists             = length(var.admin_subnet_nsg_arm_id) > 0
+                                                                        exists_in_workload = length(try(data.terraform_remote_state.landscape.outputs.admin_nsg_id, "")) > 0
+                                                                        id_in_workload     = try(data.terraform_remote_state.landscape.outputs.admin_nsg_id, "")
+                                                                      }
                                          }
 
-  subnet_db_arm_id                     = try(coalesce(var.db_subnet_arm_id, data.terraform_remote_state.landscape.outputs.db_subnet_id), "")
-  subnet_db_nsg_arm_id                 = try(coalesce(var.db_subnet_nsg_arm_id, data.terraform_remote_state.landscape.outputs.db_nsg_id), "")
-
-  subnet_db                            = {
-                                            "name"    = length(local.subnet_db_arm_id) > 0 ? (
-                                                           split("/",local.subnet_db_arm_id)[10]) : (
-                                                           var.db_subnet_name),
-                                            "arm_id"  = local.subnet_db_arm_id
-                                            "prefix"  = length(local.subnet_db_arm_id) > 0 ? "" : var.db_subnet_address_prefix
-                                            "defined" = length(var.db_subnet_address_prefix) > 0
-                                            "nsg" = {
-                                                        "name"    = length(local.subnet_db_nsg_arm_id) > 0 ? (
-                                                                      split("/",local.subnet_db_nsg_arm_id)[8]) : (
-                                                                      var.db_subnet_nsg_name),
-                                                        "arm_id"  = local.subnet_db_nsg_arm_id
-                                                      }
-                                         }
-  subnet_app_arm_id                     = try(coalesce(var.app_subnet_arm_id, data.terraform_remote_state.landscape.outputs.app_subnet_id), "")
-  subnet_app_nsg_arm_id                 = try(coalesce(var.app_subnet_nsg_arm_id, data.terraform_remote_state.landscape.outputs.app_nsg_id), "")
-
-  subnet_app                            = {
-                                            "name"    = length(local.subnet_app_arm_id) > 0 ? (
-                                                           split("/",local.subnet_app_arm_id)[10]) : (
-                                                           var.app_subnet_name),
-                                            "arm_id"  = local.subnet_app_arm_id
-                                            "prefix"  = length(local.subnet_app_arm_id) > 0 ? "" : var.app_subnet_address_prefix
-                                            "defined" = length(var.app_subnet_address_prefix) > 0
-                                            "nsg" = {
-                                                        "name"    = length(local.subnet_app_nsg_arm_id) > 0 ? (
-                                                                      split("/",local.subnet_app_nsg_arm_id)[8]) : (
-                                                                      var.app_subnet_nsg_name),
-                                                        "arm_id"  = local.subnet_app_nsg_arm_id
-                                                      }
+  subnet_db                         = {
+                                            name                   = var.db_subnet_name
+                                            id                     = var.db_subnet_arm_id
+                                            exists                 = length(var.db_subnet_arm_id) > 1
+                                            prefix                 = var.db_subnet_address_prefix
+                                            defined                = length(var.db_subnet_address_prefix) > 0
+                                            exists_in_workload     = length(try(data.terraform_remote_state.landscape.outputs.db_subnet_id, "")) > 0
+                                            id_in_workload         = try(data.terraform_remote_state.landscape.outputs.db_subnet_id, "")
+                                            nsg                    = {
+                                                                        name               = var.db_subnet_nsg_name
+                                                                        id                 = var.db_subnet_nsg_arm_id
+                                                                        exists             = length(var.db_subnet_nsg_arm_id) > 0
+                                                                        exists_in_workload = length(try(data.terraform_remote_state.landscape.outputs.db_nsg_id, "")) > 0
+                                                                        id_in_workload     = try(data.terraform_remote_state.landscape.outputs.db_nsg_id, "")
+                                                                      }
                                          }
 
-
-  subnet_web_arm_id                     = try(coalesce(var.web_subnet_arm_id, data.terraform_remote_state.landscape.outputs.web_subnet_id), "")
-  subnet_web_nsg_arm_id                 = try(coalesce(var.web_subnet_nsg_arm_id, data.terraform_remote_state.landscape.outputs.web_nsg_id), "")
-
-  subnet_web                            = {
-                                            "name"    = length(local.subnet_web_arm_id) > 0 ? (
-                                                           split("/",local.subnet_web_arm_id)[10]) : (
-                                                           var.web_subnet_name),
-                                            "arm_id"  = local.subnet_web_arm_id
-                                            "prefix"  = length(local.subnet_web_arm_id) > 0 ? "" : var.db_subnet_address_prefix
-                                            "defined" = length(var.web_subnet_address_prefix) > 0
-                                            "nsg" = {
-                                                        "name"    = length(local.subnet_web_nsg_arm_id) > 0 ? (
-                                                                      split("/",local.subnet_web_nsg_arm_id)[8]) : (
-                                                                      var.web_subnet_nsg_name),
-                                                        "arm_id"  = local.subnet_web_nsg_arm_id
-                                                      }
+  subnet_app                         = {
+                                            name                   = var.app_subnet_name
+                                            id                     = var.app_subnet_arm_id
+                                            exists                 = length(var.app_subnet_arm_id) > 1
+                                            prefix                 = var.app_subnet_address_prefix
+                                            defined                = length(var.app_subnet_address_prefix) > 0
+                                            exists_in_workload     = length(try(data.terraform_remote_state.landscape.outputs.app_subnet_id, "")) > 0
+                                            id_in_workload         = try(data.terraform_remote_state.landscape.outputs.app_subnet_id, "")
+                                            nsg                    = {
+                                                                        name               = var.app_subnet_nsg_name
+                                                                        id                 = var.app_subnet_nsg_arm_id
+                                                                        exists             = length(var.app_subnet_nsg_arm_id) > 0
+                                                                        exists_in_workload = length(try(data.terraform_remote_state.landscape.outputs.app_nsg_id, "")) > 0
+                                                                        id_in_workload     = try(data.terraform_remote_state.landscape.outputs.app_nsg_id, "")
+                                                                      }
                                          }
 
-  subnet_storage_arm_id                     = try(coalesce(var.storage_subnet_arm_id, data.terraform_remote_state.landscape.outputs.storage_subnet_id), "")
-  subnet_storage_nsg_arm_id                 = try(coalesce(var.storage_subnet_nsg_arm_id, data.terraform_remote_state.landscape.outputs.storage_nsg_id), "")
 
-  subnet_storage                            = {
-                                                "name"    = length(local.subnet_storage_arm_id) > 0 ? (
-                                                              split("/",local.subnet_storage_arm_id)[10]) : (
-                                                              var.storage_subnet_name),
-                                                "arm_id"  = local.subnet_storage_arm_id
-                                                "prefix"  = length(local.subnet_storage_arm_id) > 0 ? "" : var.db_subnet_address_prefix
-                                                "defined" = length(var.storage_subnet_address_prefix) > 0
-                                                "nsg" = {
-                                                            "name"    = length(local.subnet_storage_nsg_arm_id) > 0 ? (
-                                                                          split("/",local.subnet_storage_nsg_arm_id)[8]) : (
-                                                                          var.storage_subnet_nsg_name),
-                                                            "arm_id"  = local.subnet_storage_nsg_arm_id
-                                                          }
+  subnet_web                         = {
+                                            name                   = var.web_subnet_name
+                                            id                     = var.web_subnet_arm_id
+                                            exists                 = length(var.web_subnet_arm_id) > 0
+                                            prefix                 = var.web_subnet_address_prefix
+                                            defined                = length(var.web_subnet_address_prefix) > 0
+                                            exists_in_workload     = length(try(data.terraform_remote_state.landscape.outputs.web_subnet_id, "")) > 0
+                                            id_in_workload         = try(data.terraform_remote_state.landscape.outputs.web_subnet_id, "")
+                                            nsg                    = {
+                                                                        name               = var.web_subnet_nsg_name
+                                                                        id                 = var.web_subnet_nsg_arm_id
+                                                                        exists             = length(var.web_subnet_nsg_arm_id) > 0
+                                                                        exists_in_workload = length(try(data.terraform_remote_state.landscape.outputs.web_nsg_id, "")) > 0
+                                                                        id_in_workload     = try(data.terraform_remote_state.landscape.outputs.web_nsg_id, "")
+                                                                      }
                                          }
 
-all_subnets                          = merge(local.sap, (
+
+
+  subnet_storage                     = {
+                                            name                   = var.storage_subnet_name
+                                            id                     = var.storage_subnet_arm_id
+                                            exists                 = length(var.storage_subnet_arm_id) > 0
+                                            prefix                 = var.storage_subnet_address_prefix
+                                            defined                = length(var.storage_subnet_address_prefix) > 0
+                                            exists_in_workload     = length(try(data.terraform_remote_state.landscape.outputs.storage_subnet_id, "")) > 0
+                                            id_in_workload         = try(data.terraform_remote_state.landscape.outputs.storage_subnet_id, "")
+                                            nsg                    = {
+                                                                       name               = var.storage_subnet_nsg_name
+                                                                       id                 = var.storage_subnet_nsg_arm_id
+                                                                       exists             = length(var.storage_subnet_nsg_arm_id) > 0
+                                                                       exists_in_workload = length(try(data.terraform_remote_state.landscape.outputs.storage_nsg_id, "")) > 0
+                                                                       id_in_workload     = try(data.terraform_remote_state.landscape.outputs.storage_nsg_id, "")
+                                                                     }
+                                         }
+
+  all_subnets                          = merge(local.sap, (
                                            {
                                              "subnet_admin"   = local.subnet_admin
                                              "subnet_db"      = local.subnet_db
@@ -506,6 +508,7 @@ all_subnets                          = merge(local.sap, (
                                            length(local.web_tags) > 0                             ? { web_tags = local.web_tags } : { web_tags = local.web_tags }), (
                                            var.use_fence_kdump && var.scs_high_availability       ? { fence_kdump_disk_size = var.use_fence_kdump_size_gb_scs } : { fence_kdump_disk_size = 0 } ), (
                                            var.use_fence_kdump && var.scs_high_availability       ? { fence_kdump_lun_number = var.use_fence_kdump_lun_scs } : { fence_kdump_lun_number = -1 }
+
                                            )
                                          )
 
@@ -516,13 +519,12 @@ all_subnets                          = merge(local.sap, (
                                            (local.db_avset_arm_ids_defined                        ? { avset_arm_ids  = local.avset_arm_ids }                   : null),
                                            (length(local.frontend_ips)      > 0                   ? { loadbalancer   = { frontend_ips = local.frontend_ips } } : { loadbalancer = { frontend_ips = [] } }),
                                            (length(local.db_tags)           > 0                   ? { tags           = local.db_tags }                         : null),
-                                           (local.db_sid_specified                                ? { instance       = local.instance }                        : null), (
                                            ( var.use_fence_kdump &&
-                                             var.database_high_availability )                     ? { fence_kdump_disk_size = var.use_fence_kdump_size_gb_db } : { fence_kdump_disk_size = 0 } ), (
-                                           ( var.use_fence_kdump &&
+                                             var.database_high_availability )                     ? { fence_kdump_disk_size = var.use_fence_kdump_size_gb_db } : { fence_kdump_disk_size = 0 } ,
+                                             ( var.use_fence_kdump &&
                                              var.database_high_availability )                     ? { fence_kdump_lun_number = var.use_fence_kdump_lun_db } : { fence_kdump_lun_number = -1 }
                                            )
-                                         )
+
 
 
   authentication                       = merge(local.authentication_temp, (
@@ -533,19 +535,22 @@ all_subnets                          = merge(local.sap, (
                                            )
                                          )
 
-  key_vault                            = merge(local.key_vault_temp, (
-                                           local.user_keyvault_specified ? (
-                                             {
-                                               kv_user_id = local.user_keyvault
-                                             }
-                                           ) : null), (
-                                           local.spn_keyvault_specified ? (
-                                             {
-                                               keyvault_id_for_deployment_credentials = local.spn_kv
-                                             }
-                                           ) : null
-                                           )
-                                         )
+  key_vault                            = {
+                                           user                                   = {
+                                                                                      id     = coalesce(data.terraform_remote_state.landscape.outputs.landscape_key_vault_user_arm_id, var.user_keyvault_id)
+                                                                                      exists = length(coalesce(data.terraform_remote_state.landscape.outputs.landscape_key_vault_user_arm_id, var.user_keyvault_id)) > 0
+                                                                                    }
+                                           spn                                    = {
+                                                                                      id     = coalesce(data.terraform_remote_state.landscape.outputs.spn_kv_id, var.spn_keyvault_id)
+                                                                                      exists = length(coalesce(data.terraform_remote_state.landscape.outputs.spn_kv_id, var.spn_keyvault_id)) > 0
+                                                                                    }
+                                          #  private_key_secret_name                = var.workload_zone_private_key_secret_name
+                                          #  public_key_secret_name                 = var.workload_zone_public_key_secret_name
+                                          #  username_secret_name                   = var.workload_zone_username_secret_name
+                                          #  password_secret_name                   = var.workload_zone_password_secret_name
+                                          #  enable_rbac_authorization              = var.enable_rbac_authorization_for_keyvault
+                                          #  set_secret_expiry                      = var.set_secret_expiry
+                                        }
 
   options                              = merge(local.options_temp, (local.disk_encryption_set_defined ? (
                                            {
@@ -595,13 +600,13 @@ all_subnets                          = merge(local.sap, (
     dns_settings                         = {
                                             use_custom_dns_a_registration                = var.use_custom_dns_a_registration
                                             dns_zone_names                               = var.dns_zone_names
-                                            management_dns_resourcegroup_name            = trimspace(coalesce(var.management_dns_resourcegroup_name, try(data.terraform_remote_state.landscape.outputs.management_dns_resourcegroup_name, local.saplib_resource_group_name)," "))
+                                            management_dns_resourcegroup_name            = trimspace(coalesce(var.management_dns_resourcegroup_name, try(data.terraform_remote_state.landscape.outputs.management_dns_resourcegroup_name, local.SAPLibrary_resource_group_name)," "))
                                             management_dns_subscription_id               = trimspace(coalesce(var.management_dns_subscription_id, try(data.terraform_remote_state.landscape.outputs.management_dns_subscription_id, " ")," "))
 
 
                                             privatelink_dns_resourcegroup_name           = trimspace(coalesce(var.privatelink_dns_resourcegroup_name,
                                                                                              try(data.terraform_remote_state.landscape.outputs.privatelink_dns_resourcegroup_name,
-                                                                                               try(data.terraform_remote_state.landscape.outputs.management_dns_resourcegroup_name, local.saplib_resource_group_name)
+                                                                                               try(data.terraform_remote_state.landscape.outputs.management_dns_resourcegroup_name, local.SAPLibrary_resource_group_name)
                                                                                              ),
                                                                                              " "
                                                                                            ))
