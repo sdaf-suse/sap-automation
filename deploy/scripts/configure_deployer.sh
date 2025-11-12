@@ -12,7 +12,7 @@
 #
 # As part of doing so it will:
 #
-#   * Installs the specifed version of terraform so that it
+#   * Installs the specified version of terraform so that it
 #     is available for all users.
 #
 #   * Installs the Azure CLI using the provided installer
@@ -353,7 +353,7 @@ required_pkgs=(
 	ca-certificates
 	curl
 	gnupg
-	dos2unix
+
 )
 
 cli_pkgs=(
@@ -666,7 +666,7 @@ if [[ "${ansible_version}" == "2.11" ]]; then
 	sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.netcommon --force --collections-path "${ansible_collections}" --server="https://old-galaxy.ansible.com" --ignore-certs
 else
 	echo "Installing community.general"
-	sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install community.general --force --collections-path "${ansible_collections}"
+	sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install community.general==11.4.1 --force --collections-path "${ansible_collections}"
 	echo "Installing ansible.netcommon:5.1.2"
 	sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.netcommon:5.1.2 --force --collections-path "${ansible_collections}"
 fi

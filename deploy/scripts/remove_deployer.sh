@@ -16,7 +16,7 @@ reset_formatting="\e[0m"
 full_script_path="$(realpath "${BASH_SOURCE[0]}")"
 script_directory="$(dirname "${full_script_path}")"
 
-#call stack has full scriptname when using source
+#call stack has full script name when using source
 source "${script_directory}/deploy_utils.sh"
 
 #helper files
@@ -130,14 +130,14 @@ get_region_code $region
 
 #Persisting the parameters across executions
 automation_config_directory=~/.sap_deployment_automation/
-generic_config_information="${automation_config_directory}"config
-deployer_config_information="${automation_config_directory}""${environment}""${region_code}"
+generic_environment_file_name="${automation_config_directory}"config
+deployer_environment_file_name="${automation_config_directory}""${environment}""${region_code}"
 
-load_config_vars "${deployer_config_information}" "step"
+load_config_vars "${deployer_environment_file_name}" "step"
 
 param_dirname=$(pwd)
 
-init "${automation_config_directory}" "${generic_config_information}" "${deployer_config_information}"
+init "${automation_config_directory}" "${generic_environment_file_name}" "${deployer_environment_file_name}"
 
 var_file="${param_dirname}"/"${parameterfile}"
 # Check that the exports ARM_SUBSCRIPTION_ID and DEPLOYMENT_REPO_PATH are defined
@@ -182,12 +182,8 @@ if [[ -n "$TF_PARALLELLISM" ]]; then
 	parallelism="$TF_PARALLELLISM"
 fi
 
-if terraform -chdir="${terraform_module_directory}" destroy "${approve}" -lock=false -parallelism="${parallelism}" -json -var-file="${var_file}" "$extra_vars" | tee destroy_output.json; then
-	return_value=${PIPESTATUS[0]}
-else
-	return_value=${PIPESTATUS[0]}
-fi
-if [ 0 == $return_value ]; then
+if terraform -chdir="${terraform_module_directory}" destroy "${approve}" -lock=false -refresh=false -parallelism="${parallelism}" -json -var-file="${var_file}" "$extra_vars" | tee -a destroy_output.json; then
+	return_value=$?
 	echo ""
 	echo -e "${cyan}Terraform destroy:                     succeeded$reset_formatting"
 	echo ""
@@ -242,10 +238,10 @@ if [ 0 == $return_value ]; then
 	echo "#########################################################################################"
 	echo ""
 	step=0
-	save_config_var "step" "${deployer_config_information}"
+	save_config_var "step" "${deployer_environment_file_name}"
 fi
 
 unset TF_DATA_DIR
 
-echo "Return from remove_deployer.sh (exit code: $return_value)"
+echo "Return from remove_deployer.sh"
 exit $return_value
