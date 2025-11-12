@@ -195,34 +195,33 @@
     get_status_maintenance_mode.stdout is not search('true') or
     get_status_maintenance_mode.stdout is search('false')
 
-- name:                                "5.6 SCSERS - SLES - Reboot and wait 5 minutes"
+- name:                                "5.6 SCSERS - SLES - Reboot and wait 4 minutes"
   ansible.builtin.debug:
-    msg:                               "Reboot and wait 5 minutes"
+    msg:                               "Reboot and wait 4 minutes"
 
 - name:                                "5.6 SCSERS - SUSE - Reboot the primary/secondary instance"
   ansible.builtin.reboot:
-    reboot_timeout:                    150
-    post_reboot_delay:                 150
+    reboot_timeout:                    120
+    post_reboot_delay:                 120
 
-- name:                                "5.6 SCSERS - SUSE - Wait for the primary/secondary instance to come back online"
-  ansible.builtin.wait_for_connection:
-    delay:                             30
-    timeout:                           60
-  register:                            wait_for_connection
-  until:                               wait_for_connection is succeeded
+- name:                               "5.6 SCSERS - SUSE - Ensure pacemaker service is enabled and started"
+  ansible.builtin.systemd:
+    name:                             pacemaker
+    enabled:                          true
+    state:                            started
+  register:                           pacemaker_status
+  until:                              pacemaker_status is succeeded
+  retries:                            25
+  delay:                              10
 
-# https://www.suse.com/support/kb/doc/?id=000021133
-# https://www.ibm.com/docs/en/db2/11.5.x?topic=pacemaker-prerequisites-integrated-solution-using
 - name:                                "5.6 SCSERS - SUSE - Wait for cluster CIB availability after reboot"
-  become:                              true
-  become_user:                         root
   ansible.builtin.shell: |
                                        # Check if CIB is accessible and cluster is responsive
                                        timeout 30 cibadmin -Q > /dev/null 2>&1
   register:                            cib_check
   until:                               cib_check.rc == 0
-  retries:                             11
-  delay:                               30
+  retries:                             30
+  delay:                               10
   tags:                                cluster_readiness
 
 - name:                                "5.6 SCSERS - SUSE - Set the Cluster out of maintenance mode"
