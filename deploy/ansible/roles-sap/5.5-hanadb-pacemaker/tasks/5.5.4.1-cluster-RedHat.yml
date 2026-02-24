@@ -30,6 +30,7 @@
       register:                        get_status_maintenance_mode
       changed_when:                    false
       ignore_errors:                   true
+      failed_when:                     false
 
     - name:                            "5.5.4.1 HANA Cluster configuration - REDHAT - Set the cluster maintenance mode if not already in maintenance mode"
       when: >-
