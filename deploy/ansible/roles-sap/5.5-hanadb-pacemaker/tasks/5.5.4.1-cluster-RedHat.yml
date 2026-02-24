@@ -14,6 +14,10 @@
 
 # +------------------------------------4--------------------------------------*/
 
+- name:                                "5.5.4.1 HANA Cluster configuration - REDHAT - Check if the pacemaker package version is greater than pacemaker-2.0.4"
+  when:                                ansible_distribution_major_version is version('8', '>=')
+  ansible.builtin.set_fact:
+    is_pcmk_ver_gt_204:                "{{ ansible_facts.packages['pacemaker'][0].version is version('2.0.4', '>') | default(false) }}"
 
 - name:                                "5.5.4.1 HANA Cluster configuration - REDHAT - Optimize the Pacemaker cluster for SAP HANA"
   when:                                ansible_hostname == primary_instance_name
@@ -33,11 +37,6 @@
                                        get_status_maintenance_mode.stdout is search('maintenance-mode: false') or
                                        get_status_maintenance_mode.stdout is search('maintenance-mode=false')
       ansible.builtin.shell:           pcs property set maintenance-mode=true
-
-    - name:                            "5.5.4.1 HANA Cluster configuration - REDHAT - Check if the pacemaker package version is greater than pacemaker-2.0.4"
-      when:                            ansible_distribution_major_version is version('8', '>=')
-      ansible.builtin.set_fact:
-        is_pcmk_ver_gt_204:            "{{ ansible_facts.packages['pacemaker'][0].version is version('2.0.4', '>') | default(false) }}"
 
     - name:                            "5.5.4.1 HANA Cluster configuration - REDHAT - Configure the SAP HANA Topology resource is created"
       ansible.builtin.shell: >
