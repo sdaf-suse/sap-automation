@@ -198,16 +198,18 @@
                                        - database_high_availability | default(false)
                                        - hana_shared_mountpoint is defined
                                        - hana_shared_mountpoint | length == 2
+                                       - backupdisks_count | int == 0
           ansible.builtin.set_fact:
-            backup_path:               "/hana/shared/{{ db_sid | upper }}/HDB{{ db_instance_number }}/backup/data/DB_{{ db_sid | upper }}{{ db_instance_number }}"
+            backup_path:               "/hana/shared/"
 
         - name:                        "5.1 Database Load  - Set backup path for standard scale-out configuration"
           when:
                                        - database_scale_out | default(false)
                                        - not (database_high_availability | default(false))
                                        - hana_shared_mountpoint is defined
+                                       - backupdisks_count | int == 0
           ansible.builtin.set_fact:
-            backup_path:               "/hana/shared/{{ db_sid | upper }}/HDB{{ db_instance_number }}/backup/data/DB_{{ db_sid | upper }}{{ db_instance_number }}"
+            backup_path:               "/hana/shared/"
 
         - name:                        "5.1 Database Load  - Set backup path for single-node configuration"
           when:
