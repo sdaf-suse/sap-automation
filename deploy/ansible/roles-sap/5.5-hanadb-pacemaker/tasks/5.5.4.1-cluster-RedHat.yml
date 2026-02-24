@@ -184,7 +184,7 @@
           register:                    update_priority
           failed_when:                 update_priority.rc > 1
 
-        - name:                        "5.5.4.1 HANA Cluster configuration - REDHAT -set SAPHana defaults 'priority' to 10"
+        - name:                        "5.5.4.1 HANA Cluster configuration - REDHAT - Set SAPHana defaults 'priority' to 10"
           ansible.builtin.shell:       pcs resource update SAPHana_{{ db_sid | upper }}_{{ db_instance_number }} meta priority=10
           register:                    update_priority_saphana
 
