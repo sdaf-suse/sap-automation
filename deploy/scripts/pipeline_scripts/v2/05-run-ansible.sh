@@ -278,8 +278,10 @@ fi
 echo "##[endgroup]"
 
 echo "##[group]- Store logs and artifacts"
-echo "Platform  : $PLATFORM"
+echo "Platform: $PLATFORM"
 pwd
+ls -lart
+cd ..
 ls -lart
 
 echo -e "$green--- Add & update files in the DevOps Repository ---$reset"
