@@ -362,7 +362,12 @@
     - name:                            "5.5.4.1 HANA Cluster configuration - REDHAT - Move SAP HANA clone to run on Primary Node for active/active setup"
       ansible.builtin.shell:           pcs resource move-with-constraint SAPHana_{{ db_sid | upper }}_{{ db_instance_number }}-clone {{ primary_instance_name }}
       register:                        move_saphana
-      failed_when:                     move_saphana.rc != 0 and not move_saphana.stdout is search('Requested item already exists')
+      failed_when:                     move_saphana.rc != 0 and not move_saphana.stderr is search('Requested item already exists')
+
+    - name:                            "5.5.4.1 HANA Cluster configuration - REDHAT - Clear resource constraint on SAP HANA clone after moving the resource to primary node"
+      ansible.builtin.shell:           pcs resource clear SAPHana_{{ db_sid | upper }}_{{ db_instance_number }}-clone
+      register:                        clear_saphana
+      failed_when:                     clear_saphana.rc != 0
   rescue:
     - name:                            "5.5.4.1 HANA Cluster configuration - REDHAT - Failed to move SAP HANA clone wait for two minutes and retry"
       ansible.builtin.wait_for:
@@ -382,6 +387,10 @@
                                         Please investigate the cluster status and move the SAPHana clone resource to the primary node manually using:
                                         pcs resource move SAPHana_{{ db_sid | upper }}_{{ db_instance_number }}-clone {{ primary_instance_name }}"
 
+    - name:                            "5.5.4.1 HANA Cluster configuration - REDHAT - Clear resource constraint on SAP HANA clone after move - Retry"
+      ansible.builtin.shell:           pcs resource clear SAPHana_{{ db_sid | upper }}_{{ db_instance_number }}-clone
+      register:                        clear_saphana
+      failed_when:                     clear_saphana.rc != 0
 
 # End of HANA clustering resources
 
