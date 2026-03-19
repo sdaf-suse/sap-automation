@@ -396,6 +396,7 @@
 
 - name:                                "5.8 HANA Pacemaker Scale-out - Configure the ANF specific resources when relevant"
   when:
+                                       - ansible_hostname in [ primary_instance_name , secondary_instance_name ]
                                        - database_high_availability
                                        - NFS_provider == "ANF"
                                        - hana_shared_mountpoint is defined
@@ -411,9 +412,10 @@
       changed_when:                    false
       register:                        hana_system_stopped
 
-    - name:                            "5.8 HANA Pacemaker Scale-out - Wait 2 minutes for SAP system to stop"
-      ansible.builtin.wait_for:
-        timeout:                       120
+    - name:                            "5.8 HANA Pacemaker Scale-out - Stop HANA on both nodes"
+      when:
+                                        - ansible_hostname in [ primary_instance_name , secondary_instance_name ]
+      ansible.builtin.include_tasks:    ../../../roles-misc/0.4-helpers/tasks/04.02-stop_hana.yml
 
     - name:                            "5.8 HANA Pacemaker Scale-out - Ensure maintenance mode is enabled"
       ansible.builtin.command:         crm configure property maintenance-mode=true
@@ -446,9 +448,10 @@
       changed_when:                    false
       register:                        hana_system_started
 
-    - name:                            "5.8 HANA Pacemaker Scale-out - Wait 5 minutes for SAP system to start"
-      ansible.builtin.wait_for:
-        timeout:                       300
+    - name:                            "5.8 HANA Pacemaker Scale-out - Start HANA on both nodes"
+      when:
+                                        - ansible_hostname in [ primary_instance_name , secondary_instance_name ]
+      ansible.builtin.include_tasks:    ../../../roles-misc/0.4-helpers/tasks/04.01-start_hana.yml
 
     - name:                            "5.8 HANA Pacemaker Scale-out - Ensure maintenance mode is disabled"
       ansible.builtin.command:         crm configure property maintenance-mode=false
