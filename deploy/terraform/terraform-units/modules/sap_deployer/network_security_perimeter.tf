@@ -73,8 +73,8 @@ output "network_security_perimeter_id" {
 }
 
 
-
-
-
-
-
+  
+  
+  
+  
+  

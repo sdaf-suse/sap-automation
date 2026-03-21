@@ -212,6 +212,9 @@ generic_environment_file_name="${automation_config_directory}"/config
 ENVIRONMENT=$(echo "$deployer_tf_state" | awk -F'-' '{print $1}' | xargs)
 LOCATION=$(echo "$deployer_tf_state" | awk -F'-' '{print $2}' | xargs)
 NETWORK=$(echo "$deployer_tf_state" | awk -F'-' '{print $3}' | xargs)
+CONTROL_PLANE_NAME="${ENVIRONMENT}-${LOCATION}-${NETWORK}"
+TF_VAR_control_plane_name="${CONTROL_PLANE_NAME}"
+export TF_VAR_control_plane_name
 
 if [ -z "$ENVIRONMENT" ] || [ -z "$LOCATION" ] || [ -z "$NETWORK" ]; then
 	echo "Could not extract environment, location or network from parameter file name"
@@ -253,8 +256,10 @@ if [ -n "${TF_VAR_use_webapp:-false}" ]; then
 	fi
 fi
 
-if [ -n "${ARM_USE_MSI:-false}" == "true" ]; then
-	deploy_using_msi_only=1
+if [ -v ARM_USE_MSI ]; then
+	if [ -n "${ARM_USE_MSI:-false}" == "true" ]; then
+		deploy_using_msi_only=1
+	fi
 fi
 
 deployer_dirname=$(dirname "${deployer_parameter_file}")
@@ -528,6 +533,8 @@ if [ 0 != "$step" ]; then
 					--vault "${keyvault}" \
 					--subscription "${subscription:-$ARM_SUBSCRIPTION_ID}" \
 					--msi \
+					--spn_id "${client_id:-$ARM_CLIENT_ID}" \
+					--subscription "${subscription:-$ARM_SUBSCRIPTION_ID}" \
 					--tenant_id "${tenant_id:-$ARM_TENANT_ID}"; then
 					print_banner "Control Plane deployment" "Secrets have been set successfully" "success"
 				else
