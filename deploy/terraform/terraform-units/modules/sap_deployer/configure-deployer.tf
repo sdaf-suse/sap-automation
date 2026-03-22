@@ -40,6 +40,8 @@ resource "null_resource" "prepare-deployer" {
                                              platform             = var.infrastructure.devops.platform,
                                              repository           = var.infrastructure.devops.repository,
                                              server_url           = var.infrastructure.devops.server_url
+                                             organization         = var.infrastructure.devops.organization,
+                                             branch               = var.infrastructure.devops.branch
                                              }
                                            )
 
