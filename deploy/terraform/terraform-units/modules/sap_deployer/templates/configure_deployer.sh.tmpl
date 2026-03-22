@@ -627,6 +627,7 @@ echo "Ansible version: $${ansible_version}"
 if [[ ! -d "$${asad_dir}" ]]; then
   git clone "$${asad_repo}" "$${asad_dir}"
   pusdhd "$${asad_dir}"
+
   git fetch --all
   if [ "$${BRANCH}" != "main" ] ; then
     git checkout "$${BRANCH}"
