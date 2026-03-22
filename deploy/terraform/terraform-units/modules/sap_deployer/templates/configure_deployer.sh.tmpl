@@ -629,9 +629,7 @@ if [[ ! -d "$${asad_dir}" ]]; then
   pushd "$${asad_dir}"
 
   git fetch --all
-  if [ "$${BRANCH}" != "main" ] ; then
-    git checkout "$${BRANCH}"
-  fi
+  git checkout "$${BRANCH}"
   popd
 fi
 #
