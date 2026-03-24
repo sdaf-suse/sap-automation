@@ -929,8 +929,6 @@ if [ 5 -eq $step ]; then
 		echo "${ppk}" >"${temp_file}"
 		chmod 600 "${temp_file}"
 
-
-
 		remote_deployer_dir="/home/${DEPLOYER_USERNAME:-azureadm}/Azure_SAP_Automated_Deployment/WORKSPACES/DEPLOYER/$(basename "$deployer_parameter_file" .tfvars)"
 		echo "Remote deployer directory:            ${remote_deployer_dir}"
 		remote_library_dir="/home/${DEPLOYER_USERNAME:-azureadm}/Azure_SAP_Automated_Deployment/WORKSPACES/LIBRARY/$(basename "$library_parameter_file" .tfvars)"
