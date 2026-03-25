@@ -18,7 +18,7 @@ fi
 
 function save_config_var() {
 	local var_name=$1 var_file=$2
-	
+
 	if [ -f "${var_file}" ]; then
 		sed -i -e "" -e /$var_name/d "${var_file}"
 	else
@@ -26,7 +26,7 @@ function save_config_var() {
 	fi
 	echo "${var_name}=${!var_name}" >>"${var_file}"
 
-	
+
 }
 
 function save_config_vars() {
@@ -633,6 +633,7 @@ function get_configuration_file {
 	local region_code=$3
 	local logical_network_name=$4
 
+	local defaultConfigFile="/home/${DEPLOYER_USERNAME:-azureadm}/Azure_SAP_Automated_Deployment/WORKSPACES/.sap_deployment_automation/${environment}${region_code}${logical_network_name}"
 	local configurationFile="${directory}/${environment}${region_code}${logical_network_name}"
 
 	if [ ! -f "${configurationFile}" ]; then
@@ -640,7 +641,15 @@ function get_configuration_file {
 		if [ ! -f "${configurationFile}" ]; then
 			configurationFile="${directory}/${environment}${region_code}${logical_network_name}"
 		else
-			sudo mv "${configurationFile}" "${directory}/${environment}${region_code}${logical_network_name}" 2>/dev/null || true
+			if [ -f "${defaultConfigFile}" ]; then
+				configurationFile="${defaultConfigFile}"
+				echo "Found configuration file in default location: ${configurationFile}"
+				echo "Copying configuration file to expected location: ${directory}/${environment}${region_code}${logical_network_name}"
+				sudo cp -ap "${configurationFile}" "${directory}/${environment}${region_code}${logical_network_name}" 2>/dev/null || true
+			else
+			  sudo mv "${configurationFile}" "${directory}/${environment}${region_code}${logical_network_name}" 2>/dev/null || true
+			fi
+
 			configurationFile="${directory}/${environment}${region_code}${logical_network_name}"
 		fi
 	fi
