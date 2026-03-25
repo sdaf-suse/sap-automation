@@ -933,7 +933,7 @@ if [ 5 -eq $step ]; then
 		echo "Remote deployer directory:            ${remote_deployer_dir}"
 		remote_library_dir="/home/${DEPLOYER_USERNAME:-azureadm}/Azure_SAP_Automated_Deployment/WORKSPACES/LIBRARY/$(basename "$library_parameter_file" .tfvars)"
 		echo "Remote library directory:             ${remote_library_dir}"
-		remote_config_dir="/home/${DEPLOYER_USERNAME:-azureadm}/Azure_SAP_Automated_Deployment/WORKSPACES/.sap_deployment_automation"
+		remote_config_dir="${CONFIG_REPO_PATH}/.sap_deployment_automation"
 		echo "Remote config directory:              ${remote_config_dir}"
 
 		ssh -i "${temp_file}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 "${DEPLOYER_USERNAME:-azureadm}"@"${deployer_public_ip_address}" "mkdir -p ${remote_deployer_dir}/.terraform"
