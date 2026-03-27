@@ -74,7 +74,7 @@ while :; do
 		CONTROL_PLANE_NAME=$(echo "${CONTROL_PLANE_NAME}" | tr "[:lower:]" "[:upper:]")
 		TF_VAR_control_plane_name="$CONTROL_PLANE_NAME"
 		TF_VAR_deployer_tfstate_key="${CONTROL_PLANE_NAME}-INFRASTRUCTURE.terraform.tfstate"
-		
+
 		export TF_VAR_deployer_tfstate_key
 		export TF_VAR_control_plane_name
 		shift 2
@@ -132,9 +132,6 @@ while :; do
 		;;
 	esac
 done
-tfstate_resource_id=""
-tfstate_parameter=""
-landscape_tfstate_key=""
 
 deployment_system="sap_landscape"
 
@@ -207,7 +204,6 @@ if [ -z "${network_logical_name}" ]; then
 fi
 
 key=$(echo "${workload_file_parametername}" | cut -d. -f1)
-landscape_tfstate_key=${key}.terraform.tfstate
 
 #Persisting the parameters across executions
 
@@ -261,7 +257,7 @@ if [ ! -f "${deployer_environment_file_name}" ]; then
 
 			read -r -p "Remote state storage account name: " REMOTE_STATE_SA
 			getAndStoreTerraformStateStorageAccountDetails "${REMOTE_STATE_SA}" "${workload_environment_file_name}"
-			
+
 		fi
 	fi
 
@@ -555,7 +551,7 @@ echo "Target subscription:                 $ARM_SUBSCRIPTION_ID"
 
 tfstate_resource_id=$(az graph query -q "Resources | join kind=leftouter (ResourceContainers | where type=='microsoft.resources/subscriptions' | project subscription=name, subscriptionId) on subscriptionId | where name == '$REMOTE_STATE_SA' | project id, name, subscription" --query data[0].id --output tsv)
 TF_VAR_tfstate_resource_id=$tfstate_resource_id
-export TF_VAR_tfstate_resource_id	
+export TF_VAR_tfstate_resource_id
 
 TF_VAR_subscription_id="$ARM_SUBSCRIPTION_ID"
 export TF_VAR_subscription_id
@@ -830,7 +826,7 @@ if [ 1 == $apply_needed ]; then
 	if [ "$ado_flag" == "--ado" ] || [ "$approve" == "--auto-approve" ]; then
 		allParameters+=(--auto-approve)
 	fi
- 
+
 	allImportParameters=(-var-file ${var_file})
 	if [ -f terraform.tfvars ]; then
 		allImportParameters+=(-var-file ${param_dirname}/terraform.tfvars)
