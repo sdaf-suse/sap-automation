@@ -79,7 +79,7 @@ while :; do
 		CONTROL_PLANE_NAME=$(echo "${CONTROL_PLANE_NAME}" | tr "[:lower:]" "[:upper:]")
 		TF_VAR_control_plane_name="$CONTROL_PLANE_NAME"
 		TF_VAR_deployer_tfstate_key="${CONTROL_PLANE_NAME}-INFRASTRUCTURE.terraform.tfstate"
-		
+
 		export TF_VAR_deployer_tfstate_key
 		export TF_VAR_control_plane_name
 		shift 2
@@ -328,7 +328,6 @@ if [ ! -v tfstate_resource_id ]; then
 	if [ -n "${REMOTE_STATE_SA}" ]; then
 		getAndStoreTerraformStateStorageAccountDetails "${REMOTE_STATE_SA}" "${system_environment_file_name}"
 	fi
-	GetAndStoreTerraformStateStorageAccountDetails "${REMOTE_STATE_SA}" "${system_environment_file_name}"
 fi
 
 var_file="${param_dirname}"/"${parameterfile}"
@@ -948,7 +947,7 @@ if [ 1 == $apply_needed ]; then
 	fi
 
 	print_banner "$banner_title" "Running Terraform apply" "info"
- 
+
 	allImportParameters=(-var-file ${var_file})
 	if [ -f terraform.tfvars ]; then
 		allImportParameters+=(-var-file ${param_dirname}/terraform.tfvars)
