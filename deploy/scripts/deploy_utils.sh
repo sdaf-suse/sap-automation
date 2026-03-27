@@ -18,7 +18,7 @@ fi
 
 function save_config_var() {
 	local var_name=$1 var_file=$2
-
+	
 	if [ -f "${var_file}" ]; then
 		sed -i -e "" -e /$var_name/d "${var_file}"
 	else
@@ -26,7 +26,7 @@ function save_config_var() {
 	fi
 	echo "${var_name}=${!var_name}" >>"${var_file}"
 
-
+	
 }
 
 function save_config_vars() {
@@ -133,24 +133,28 @@ function getAndStoreTerraformStateStorageAccountDetails {
 
 	echo "Trying to find the storage account:  ${REMOTE_STATE_SA}"
 
-	save_config_vars "${config_file_name}" REMOTE_STATE_SA
-	if [ -z "$STATE_SUBSCRIPTION" ]; then
-		tf_resource_id=$(az resource list --name "${REMOTE_STATE_SA}" --resource-type Microsoft.Storage/storageAccounts --query "[].id | [0]" --output tsv)
-		REMOTE_STATE_RGNAME=$(az resource list --name "${REMOTE_STATE_SA}" --resource-type Microsoft.Storage/storageAccounts --query "[].resourceGroup | [0]" --output tsv)
-	else
-		tf_resource_id=$(az resource list --name "${REMOTE_STATE_SA}" --resource-type Microsoft.Storage/storageAccounts --subscription "$STATE_SUBSCRIPTION" --query "[].id | [0]" --output tsv)
-		REMOTE_STATE_RGNAME=$(az resource list --name "${REMOTE_STATE_SA}" --resource-type Microsoft.Storage/storageAccounts --subscription "$STATE_SUBSCRIPTION" --query "[].resourceGroup | [0]" --output tsv)
+	tfstate_resource_id=$(az graph query -q "Resources | join kind=leftouter (ResourceContainers | where type=='microsoft.resources/subscriptions' | project subscription=name, subscriptionId) on subscriptionId | where name == '$REMOTE_STATE_SA' | project id, name, subscription" --query data[0].id --output tsv)
 
-	fi
 	fail_if_null tfstate_resource_id
 
-	export REMOTE_STATE_RG=$REMOTE_STATE_RGNAME
-	export tfstate_resource_id=$tf_resource_id
+	STATE_SUBSCRIPTION=$(echo "${tfstate_resource_id}" | cut -d/ -f3 | tr -d \" | xargs)
+	REMOTE_STATE_RG=$(echo "${tfstate_resource_id}" | cut -d/ -f5 | tr -d \" | xargs)
 
-	save_config_vars "${config_file_name}" \
-		REMOTE_STATE_RG \
-		tfstate_resource_id \
-		STATE_SUBSCRIPTION
+	TF_VAR_tfstate_resource_id=$tfstate_resource_id
+	
+	export REMOTE_STATE_RG
+	export STATE_SUBSCRIPTION
+	export TF_VAR_tfstate_resource_id
+	export tfstate_resource_id="${tfstate_resource_id}"
+
+	if [ -f "${config_file_name}" ]; then
+
+		save_config_vars "${config_file_name}" \
+			REMOTE_STATE_SA \
+			REMOTE_STATE_RG \
+			tfstate_resource_id \
+			STATE_SUBSCRIPTION
+	fi
 	echo "Found the storage account:           ${REMOTE_STATE_SA}"
 }
 
@@ -633,7 +637,6 @@ function get_configuration_file {
 	local region_code=$3
 	local logical_network_name=$4
 
-	local defaultConfigFile="/home/${DEPLOYER_USERNAME:-azureadm}/Azure_SAP_Automated_Deployment/WORKSPACES/.sap_deployment_automation/${environment}${region_code}${logical_network_name}"
 	local configurationFile="${directory}/${environment}${region_code}${logical_network_name}"
 
 	if [ ! -f "${configurationFile}" ]; then
@@ -641,15 +644,7 @@ function get_configuration_file {
 		if [ ! -f "${configurationFile}" ]; then
 			configurationFile="${directory}/${environment}${region_code}${logical_network_name}"
 		else
-			if [ -f "${defaultConfigFile}" ]; then
-				configurationFile="${defaultConfigFile}"
-				echo "Found configuration file in default location: ${configurationFile}"
-				echo "Copying configuration file to expected location: ${directory}/${environment}${region_code}${logical_network_name}"
-				sudo cp -ap "${configurationFile}" "${directory}/${environment}${region_code}${logical_network_name}" 2>/dev/null || true
-			else
-			  sudo mv "${configurationFile}" "${directory}/${environment}${region_code}${logical_network_name}" 2>/dev/null || true
-			fi
-
+			sudo mv "${configurationFile}" "${directory}/${environment}${region_code}${logical_network_name}" 2>/dev/null || true
 			configurationFile="${directory}/${environment}${region_code}${logical_network_name}"
 		fi
 	fi
