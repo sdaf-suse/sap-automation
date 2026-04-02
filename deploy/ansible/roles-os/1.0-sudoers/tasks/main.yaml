@@ -7,10 +7,37 @@
 #
 # -----------------------------------------------------------------------------
 
+- name:                                1.0 - Check available sudoers file paths
+  become:                              true
+  ansible.builtin.stat:
+    path:                              "{{ sudoers_candidate_path }}"
+  loop:
+    - /usr/etc/sudoers
+    - /etc/sudoers
+  loop_control:
+    loop_var:                          sudoers_candidate_path
+  register:                            sudoers_path_stats
+
+- name:                                1.0 - Select available sudoers file path
+  ansible.builtin.set_fact:
+    sudoers_path: >-
+                                       {{
+                                         (sudoers_path_stats.results |
+                                         selectattr('stat.exists') |
+                                         map(attribute='stat.path') |
+                                         first) | default('')
+                                       }}
+
+- name:                                1.0 - Ensure a supported sudoers file exists
+  ansible.builtin.fail:
+    msg:                               "Unable to locate a supported sudoers file. Checked /usr/etc/sudoers and /etc/sudoers."
+  when:
+    - sudoers_path == ""
+
 - name:                                1.0 - Enable logging for sudo operations
   become:                              true
   ansible.builtin.blockinfile:
-    path:                              /usr/etc/sudoers
+    path:                              "{{ sudoers_path }}"
     state:                             present
     insertafter:                       'EOF'
     validate:                          visudo -cf %s
