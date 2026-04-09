@@ -167,7 +167,7 @@
   when:
     - node_tier == 'db2'
 
-- name:                                "1.9 Kernel parameters - Set limits for HANA"
+- name:                                "1.9 Kernel parameters - Set limits for HANA on SLES16"
   ansible.builtin.blockinfile:
     path:                              /usr/etc/security/limits.conf
     insertafter:                       '#@student        -       maxlogins       4'
@@ -179,6 +179,21 @@
                 @dba       soft    nproc    unlimited
   when:
     - node_tier == 'hana'
+    - (ansible_distribution | lower ~ ansible_distribution_major_version) in ['sles_sap16' ]
+
+- name:                                "1.9 Kernel parameters - Set limits for HANA"
+  ansible.builtin.blockinfile:
+    path:                              /etc/security/limits.conf
+    insertafter:                       '#@student        -       maxlogins       4'
+    state:                              present
+    block: |
+                @sapsys    hard    nproc    unlimited
+                @sapsys    soft    nproc    unlimited
+                @dba       hard    nproc    unlimited
+                @dba       soft    nproc    unlimited
+  when:
+    - node_tier == 'hana'
+    - (ansible_distribution | lower ~ ansible_distribution_major_version) not in ['sles_sap16' ]
 
 - name:                                "1.9 Kernel parameters - Set limits for app tier"
   ansible.builtin.blockinfile:
