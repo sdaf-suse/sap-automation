@@ -57,6 +57,15 @@
         - always
         - 0.1-win-passwords
 
+    - name:                            "SAP OS configuration playbook: - Ensure passlib is installed on the controller"
+      become:                          true
+      become_user:                     root
+      ansible.builtin.package:
+        name:                          python3-passlib
+        state:                         present
+      when:                            ansible_os_family | upper == "SUSE"
+
+
 # /*----------------------------------------------------------------------------8
 # |                                                                            |
 # |         Playbook for performing SAP specific OS configuration tasks        |
