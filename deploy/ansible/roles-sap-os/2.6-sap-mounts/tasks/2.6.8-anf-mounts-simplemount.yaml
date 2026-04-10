@@ -38,6 +38,7 @@
   ansible.builtin.set_fact:
     all_sap_mounts:                    "{% if MULTI_SIDS is defined %}{{ MULTI_SIDS }}{% else %}{{ all_sap_mounts | default([]) + [this_sid] }}{% endif %}"
     db_hosts:                          "{{ query('inventory_hostnames', '{{ sap_sid | upper }}_DB') }}"
+    idmapd_path:                       "{% if (ansible_distribution | lower ~ ansible_distribution_major_version) in ['sles_sap16' ] %}/usr/etc/idmapd.conf{% else %}/etc/idmapd.conf{% endif %}"
 
 - name:                                "ANF Mount: Ensure the NFS service is stopped"
   ansible.builtin.systemd:
@@ -64,7 +65,7 @@
     - name:                            "ANF Mount: Domain is configured as
                                         the default Azure NetApp Files domain"
       ansible.builtin.lineinfile:
-        path:                          /usr/etc/idmapd.conf
+        path:                          "{{ idmapd_path }}"
         regexp:                        '^[ #]*Domain = '
         line:                          'Domain = defaultv4iddomain.com'
         insertafter:                   '[General]'
@@ -75,7 +76,7 @@
     - name:                            "ANF Mount: Make sure that user
                                         mapping is set to 'nobody'"
       ansible.builtin.lineinfile:
-        path:                          /usr/etc/idmapd.conf
+        path:                          "{{ idmapd_path }}"
         regexp:                        '^[ #]*Nobody-User = '
         line:                          'Nobody-User = nobody'
         insertafter:                   '^[ #]*Nobody-User = '
@@ -86,7 +87,7 @@
     - name:                            "ANF Mount: Make sure that group
                                         mapping is set to 'nobody'"
       ansible.builtin.lineinfile:
-        path:                          /usr/etc/idmapd.conf
+        path:                          "{{ idmapd_path }}"
         regexp:                        '^[ #]*Nobody-Group = '
         line:                          'Nobody-Group = nobody'
         insertafter:                   '^[ #]*Nobody-Group = '

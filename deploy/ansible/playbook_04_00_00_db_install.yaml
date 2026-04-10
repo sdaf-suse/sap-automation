@@ -298,6 +298,7 @@
     distribution_full_id:              "{{ ansible_distribution | lower ~ ansible_distribution_version }}"
     distro_family:                     "{{ ansible_os_family | upper }}"
 
+
   tasks:
     - name:                            "Database Installation Playbook: - HANA Scale-out - Check required Database HA variables"
       ansible.builtin.set_fact:
@@ -315,10 +316,7 @@
 
         - name:                        "Database Installation Playbook: - HANA Scale-out - Set SSH config path for SLES 16+"
           ansible.builtin.set_fact:
-            ssh_config_path:           "/usr/etc/ssh/sshd_config"
-          when:
-            - ansible_os_family | upper == "SUSE"
-            - ansible_distribution_major_version | int >= 16
+            ssh_config_path:           "{% if (ansible_distribution | lower ~ ansible_distribution_major_version) in ['sles_sap16' ] %}/usr/etc/ssh/sshd_config{% else %}/etc/ssh/sshd_config{% endif %}"
 
         - name:                        "Database Installation Playbook: - HANA - Get HANA version"
           ansible.builtin.include_role:
