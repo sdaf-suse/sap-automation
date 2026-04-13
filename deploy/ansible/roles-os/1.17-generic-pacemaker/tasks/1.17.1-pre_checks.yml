@@ -16,7 +16,7 @@
 
 - name:                                "1.17 Generic Pacemaker: - Ensure passlib is installed"
   ansible.builtin.package:
-    name:                              "{% if (ansible_distribution | lower ~ ansible_distribution_major_version) in ['sles_sap16' ] %}python313-passlib{% else %}python3-passlib{% endif %}"
+    name:                              "{% if (ansible_distribution | lower ~ ansible_distribution_major_version) in ['suse16', 'sles_sap16' ] %}python313-passlib{% else %}python3-passlib{% endif %}"
     state:                             present
   vars:
     ansible_python_interpreter:        "{{ python_version }}"

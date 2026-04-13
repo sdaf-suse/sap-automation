@@ -36,7 +36,7 @@
       become:                          true
       become_user:                     root
       ansible.builtin.package:
-        name:                          "{% if (ansible_distribution | lower ~ ansible_distribution_major_version) in ['sles_sap16' ] %}python313-passlib{% else %}python3-passlib{% endif %}"python3-passlib
+        name:                          "{% if (ansible_distribution | lower ~ ansible_distribution_major_version) in ['suse16', 'sles_sap16' ] %}python313-passlib{% else %}python3-passlib{% endif %}"python3-passlib
         state:                         present
       when:                            ansible_os_family | upper == "SUSE"
 
