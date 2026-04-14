@@ -32,7 +32,7 @@
         path:                          "{{ _workspace_directory }}/.progress/ers-install-done"
         state:                          absent
 
-    - name:                            "SAP Central Services Installation Playbook: - Ensure passlib is installed on the controller"
+    - name:                            "SAP Central Services Installation Playbook: - Ensure passlib is installed"
       become:                          true
       become_user:                     root
       ansible.builtin.package:
