@@ -5,12 +5,6 @@
 
 #error codes include those from /usr/include/sysexits.h
 
-#colors for terminal
-bold_red_underscore="\e[1;4;31m"
-bold_red="\e[1;31m"
-cyan="\e[1;36m"
-reset_formatting="\e[0m"
-
 #External helper functions
 #. "$(dirname "${BASH_SOURCE[0]}")/deploy_utils.sh"
 full_script_path="$(realpath "${BASH_SOURCE[0]}")"
@@ -60,8 +54,8 @@ while :; do
 		;;
 	-h | --help)
 		showhelp
-		exit 3
 		shift
+		exit 3
 		;;
 	-v | --verbose)
 		# Enable debugging
@@ -79,22 +73,27 @@ done
 
 echo "Checking the storage account access methods"
 useSAS=$(az storage account show --name "${REMOTE_STATE_SA}" --subscription "${STATE_SUBSCRIPTION}" --query allowSharedKeyAccess --out tsv)
-
-if [ $useSAS = "true" ]; then
-	files=$(az storage blob list --container-name tfvars --account-name "${REMOTE_STATE_SA}" --subscription "${STATE_SUBSCRIPTION}" --query "[].name" -o tsv --only-show-errors --output tsv)
+if [ "$useSAS" = "true" ]; then
+	echo "Storage Account Authentication:      Key"
+	AZURE_STORAGE_AUTH_MODE=key
+	export AZURE_STORAGE_AUTH_MODE
+	export ARM_USE_AZUREAD=false
 else
-	files=$(az storage blob list --container-name tfvars --account-name "${REMOTE_STATE_SA}" --subscription "${STATE_SUBSCRIPTION}" --auth-mode login --query "[].name" -o tsv --only-show-errors --output tsv)
+	echo "Storage Account Authentication:      Entra ID"
+	AZURE_STORAGE_AUTH_MODE=login
+	export AZURE_STORAGE_AUTH_MODE
+	export ARM_USE_AZUREAD=true
 fi
+
+files=$(az storage blob list --container-name tfvars --account-name "${REMOTE_STATE_SA}" --subscription "${STATE_SUBSCRIPTION}" --query "[].name" -o tsv --only-show-errors --output tsv)
 for name in $files; do
 	if [ -n "$name" ]; then
-		echo "Downloading file: " "$name"
+
 		dirName=$(dirname "$name")
+		echo "Downloading file: " "$name" to "$dirName"
 		mkdir -p "$dirName"
-		if [ $useSAS = "true" ]; then
-			az storage blob download --container-name tfvars --account-name "${REMOTE_STATE_SA}" --subscription "${STATE_SUBSCRIPTION}" --file "${name}" --name "${name}" --only-show-errors --output none --no-progress
-		else
-			az storage blob download --container-name tfvars --account-name "${REMOTE_STATE_SA}" --subscription "${STATE_SUBSCRIPTION}" --auth-mode login --file "${name}" --name "${name}" --only-show-errors --output none --no-progress
-		fi
+		touch "$name"
+		az storage blob download --container-name tfvars --account-name "${REMOTE_STATE_SA}" --subscription "${STATE_SUBSCRIPTION}" --file "${name}" --name "${name}" --only-show-errors --output none --no-progress
 	fi
 
 done
