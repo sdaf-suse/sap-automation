@@ -41,22 +41,25 @@
 
 # Newer Python versions removed the crypt module, so Ansible's
 # password_hash filter requires passlib on the control node.
-- name:                                "2.5 SAP Users: - Ensure passlib is installed on controller"
+- name:                                "2.5 SAP Users: - Verify passlib is available on controller"
   delegate_to:                         localhost
   run_once:                            true
   become:                              false
-  block:
-    - name:                            "2.5 SAP Users: - Install passlib in Ansible runtime environment"
-      ansible.builtin.pip:
-        name:                          passlib
-        state:                         present
-        executable:                    "{{ ansible_playbook_python | dirname }}/pip"
-  rescue:
-    - name:                            "2.5 SAP Users: - Install passlib using system pip3 on controller"
-      ansible.builtin.pip:
-        name:                          passlib
-        state:                         present
-        executable:                    pip3
+  ansible.builtin.command:
+    cmd:                               "{{ ansible_playbook_python }} -c \"import passlib\""
+  register:                            passlib_check
+  changed_when:                        false
+  failed_when:                         false
+  tags:
+    - always
+
+- name:                                "2.5 SAP Users: - Fail if passlib is missing on controller"
+  delegate_to:                         localhost
+  run_once:                            true
+  become:                              false
+  ansible.builtin.fail:
+    msg:                               "passlib is required on the Ansible control node for password_hash(). Install it with '{{ ansible_playbook_python }} -m pip install passlib' and rerun this playbook."
+  when:                                passlib_check.rc != 0
   tags:
     - always
 
