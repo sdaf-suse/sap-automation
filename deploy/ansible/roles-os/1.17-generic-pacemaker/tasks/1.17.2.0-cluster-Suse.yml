@@ -66,6 +66,7 @@
   failed_when:                         false
 
 - name:                                "1.17 Generic Pacemaker - Ensure the firewall service is configured to allow High Availability traffic"
+  when:                                ansible_distribution_major_version | int >= 16
   ansible.posix.firewalld:
     service:                           high-availability
     state:                             enabled
