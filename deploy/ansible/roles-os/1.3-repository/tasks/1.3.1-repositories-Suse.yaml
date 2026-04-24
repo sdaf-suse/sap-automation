@@ -24,7 +24,8 @@
 # Add repositories
 - name:                                "1.3.1 Repository - SUSE - Add the repositories {{ ansible_os_family }}"
   community.general.zypper_repository:
-    repo:                              "{{ item.repo }}"
+    name:                              "{{ item.repo }}"
+    repo:                              "{{ item.url }}"
     state:                             "{{ item.state }}"
     overwrite_multiple:                true
     disable_gpg_check:                 true
@@ -33,8 +34,8 @@
   register:                            repo_result
   ignore_errors:                       true
   failed_when:
-                                       - zypresult.rc != 0
-                                       - zypresult.rc != 4
+                                       - repo_result.rc != 0
+                                       - repo_result.rc != 4
 
 - name:                                "1.3.1 Repository - SUSE - Add the repositories result"
   ansible.builtin.debug:
