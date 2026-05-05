@@ -78,12 +78,7 @@
 # -------------------------------------+---------------------------------------8
 - name:                                "1.13 MOTD - set fact for sshd_config path"
   ansible.builtin.set_fact:
-    sshd_config_path: >-
-                       {% if (ansible_distribution | lower ~ ansible_distribution_major_version) in ['sles_sap16' ] %}
-                         /usr/etc/ssh/sshd_config
-                       {% else %}
-                         /etc/ssh/sshd_config
-                       {% endif %}
+    sshd_config_path:                  "{% if (ansible_distribution | lower ~ ansible_distribution_major_version) in ['sles_sap16' ] %}/usr/etc/ssh/sshd_config{% else %}/etc/ssh/sshd_config{% endif %}"
 
 - name:                                "1.13 MOTD - Update PrintMotd when commented"
   ansible.builtin.lineinfile:
