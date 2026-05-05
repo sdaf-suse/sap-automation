@@ -220,7 +220,6 @@
           delay:                       30
 
       rescue:
-
         - name:                        "[Rescue] 5.5.3 HANA Pacemaker - Reload HA Provides"
           become_user:                 "{{ db_sid | lower }}adm"
           become:                      true
@@ -229,6 +228,12 @@
           failed_when:                 saphanasr_reload.rc != 0
           args:
             chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+          environment:
+            PATH:                      /usr/bin:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+            HOME:                      /usr/sap/{{ db_sid | upper }}/home
+            DIR_LIBRARY:               /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+            LD_LIBRARY_PATH:           /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+            SAPSYSTEMNAME:             "{{ db_sid | upper }}"
 
         - name:                        "5.5.3 HANA Pacemaker - [Rescue] - Pause to give HANA replication time to stabilize"
           ansible.builtin.pause:
@@ -246,7 +251,7 @@
             chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/{{ hostvars[primary_instance_name]['virtual_host'] }}/trace
           register:                    saphanasr_verification
           until:                       saphanasr_verification.stdout is search("SOK")
-          retries:                     10
+          retries:                     20
           delay:                       30
 
     - name:                            "5.5.3 HANA Pacemaker - Log that the hook script is working as expected"
