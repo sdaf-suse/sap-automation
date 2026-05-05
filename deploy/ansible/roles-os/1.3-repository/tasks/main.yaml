@@ -114,8 +114,7 @@
   register:                            zypresult
   ignore_errors:                       true
   failed_when:
-    - zypresult.rc != 0
-    - zypresult.rc != 4
+    - zypresult.results | selectattr('rc', 'not', 'in', [0, 4]) | map(attribute='rc') | list | length > 0
   when:
     - custom_repos_for_tier is defined
     - ansible_os_family | upper == 'SUSE'

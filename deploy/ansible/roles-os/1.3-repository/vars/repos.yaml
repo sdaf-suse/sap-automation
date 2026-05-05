@@ -61,6 +61,7 @@ repos:
   sles_sap15.6:
     - { tier:   'os', repo: 'Microsoft Production', url: 'https://packages.microsoft.com/sles/15/prod/', state: 'present' }
   sles_sap15.7:
+    - { tier:   'os', repo: 'Microsoft Production', url: 'https://packages.microsoft.com/sles/15/prod/', state: 'present' }
   sles_sap16.0:
   sles15.3:
   sles15.4:
