@@ -251,6 +251,18 @@
     reboot_timeout:                    180
     post_reboot_delay:                 180
 
+- name:                                "5.6 SCSERS - SUSE - Wait for cluster CIB availability after reboot"
+  become:                              true
+  become_user:                         root
+  ansible.builtin.shell: |
+                                       # Check if CIB is accessible and cluster is responsive
+                                       timeout 30 cibadmin -Q > /dev/null 2>&1
+  register:                            cib_check
+  until:                               cib_check.rc == 0
+  retries:                             11
+  delay:                               30
+  tags:                                cluster_readiness
+
 - name:                                "5.6.4.2 SCS/ERS Pacemaker - SAP Resources - SUSE- Set the Cluster out of maintenance mode"
   ansible.builtin.shell:               crm configure property maintenance-mode=false
 

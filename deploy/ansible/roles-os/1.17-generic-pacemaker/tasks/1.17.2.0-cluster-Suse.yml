@@ -329,6 +329,10 @@
       failed_when:                     false
       changed_when:                    false
 
+    - name:                            "1.17 Generic Pacemaker - Set SBD STONITH agent name"
+      ansible.builtin.set_fact:
+        sbd_stonith_agent:             "{{ 'fence_sbd' if ansible_distribution_major_version | int >= 16 else 'stonith:external/sbd' }}"
+
     - name:                            "1.17 Generic Pacemaker - Stonith SBD is already configured in cluster"
       when:                            stonith_sbd_configured.rc == 0
       block:
@@ -344,14 +348,14 @@
 
         - name:                        "1.17 Generic Pacemaker - Recreate Stonith SBD in cluster"
           ansible.builtin.shell: |
-                                       crm configure primitive stonith-sbd fence_sbd \
+                                       crm configure primitive stonith-sbd {{ sbd_stonith_agent }} \
                                          params pcmk_delay_max="15" \
                                          op monitor interval="600" timeout="15"
 
     - name:                            "1.17 Generic Pacemaker - Ensure Stonith SBD is configured in cluster"
       when:                            stonith_sbd_configured.rc != 0
       ansible.builtin.shell: |
-                                       crm configure primitive stonith-sbd fence_sbd \
+                                       crm configure primitive stonith-sbd {{ sbd_stonith_agent }} \
                                          params pcmk_delay_max="15" \
                                          op monitor interval="600" timeout="15"
 
