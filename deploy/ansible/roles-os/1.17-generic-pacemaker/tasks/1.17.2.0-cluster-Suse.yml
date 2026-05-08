@@ -77,65 +77,70 @@
   block:
 
     - name:                            "1.17 Generic Pacemaker - Ensure corosync is configured"
-      ansible.builtin.shell:           "crm cluster init -y  --interface eth0"
+      when:                            ansible_distribution_major_version | int < 16
+      ansible.builtin.shell:           "crm cluster init -y -u corosync --interface eth0"
       register:                        crm_init_result
       failed_when:                     crm_init_result.rc > 1
 
     - name:                            "1.17 Generic Pacemaker - Ensure cluster (hdb_{{ db_sid | upper }}) is configured"
+      when:
+                                       - node_tier == 'hana'
+                                       - database_cluster_type == "AFA"
       # ha-cluster-init is not supported in SUSE 15 SP4 anymore, crm syntax required
       # ansible.builtin.shell:         "ha-cluster-init -y --name 'hdb_{{ db_sid | upper }}' --interface eth0 "
       ansible.builtin.shell:           "crm cluster init -y --name 'hdb_{{ db_sid | upper }}' --interface eth0 "
       register:                        crm_init_result
       failed_when:                     crm_init_result.rc > 1
-      when:
-                                       - node_tier == 'hana'
-                                       - database_cluster_type == "AFA"
+
 
     - name:                            "1.17 Generic Pacemaker - Ensure cluster (hdb_{{ db_sid | upper }}) is configured - SBD"
+      when:
+                                       - node_tier == 'hana'
+                                       - not database_cluster_type == "AFA"
       ansible.builtin.shell: |
                                        crm cluster init -y --name 'hdb_{{ db_sid | upper }}' --interface eth0 \
                                         --sbd-device="{{ sbd_device }}"
       register:                        crm_init_result
       failed_when:                     crm_init_result.rc > 1
-      when:
-                                       - node_tier == 'hana'
-                                       - not database_cluster_type == "AFA"
+
 
     - name:                            "1.17 Generic Pacemaker - Ensure cluster (scs_{{ sap_sid | upper }}) is configured"
-      ansible.builtin.shell:           "crm cluster init -y --name 'scs_{{ sap_sid | upper }}' --interface eth0 "
-      register:                        crm_init_result
-      failed_when:                     crm_init_result.rc > 1
       when:
                                        - node_tier == 'scs'
                                        - scs_cluster_type == "AFA"
+      ansible.builtin.shell:           "crm cluster init -y --name 'scs_{{ sap_sid | upper }}' --interface eth0 "
+      register:                        crm_init_result
+      failed_when:                     crm_init_result.rc > 1
 
     - name:                            "1.17 Generic Pacemaker - Ensure cluster (scs_{{ sap_sid | upper }}) is configured - SBD"
+      when:
+                                       - node_tier == 'scs'
+                                       - not scs_cluster_type == "AFA"
       ansible.builtin.shell: |
                                        crm cluster init -y --name 'scs_{{ sap_sid | upper }}' --interface eth0 \
                                         --sbd-device="{{ sbd_device }}"
       register:                        crm_init_result
       failed_when:                     crm_init_result.rc > 1
-      when:
-                                       - node_tier == 'scs'
-                                       - not scs_cluster_type == "AFA"
+
 
     - name:                            "1.17 Generic Pacemaker - Ensure cluster (db2_{{ db_sid | upper }}) is configured"
-      ansible.builtin.shell:           "crm cluster init -y --name 'db2_{{ db_sid | upper }}' --interface eth0 "
-      register:                        crm_init_result
-      failed_when:                     crm_init_result.rc > 1
       when:
                                        - node_tier == 'db2'
                                        - database_cluster_type == "AFA"
+      ansible.builtin.shell:           "crm cluster init -y --name 'db2_{{ db_sid | upper }}' --interface eth0 "
+      register:                        crm_init_result
+      failed_when:                     crm_init_result.rc > 1
+
 
     - name:                            "1.17 Generic Pacemaker - Ensure cluster (db2_{{ db_sid | upper }}) is configured - SBD"
+      when:
+                                       - node_tier == 'db2'
+                                       - not database_cluster_type == "AFA"
       ansible.builtin.shell: |
                                        crm cluster init -y --name 'db2_{{ db_sid | upper }}' --interface eth0 \
                                         --sbd-device="{{ sbd_device }}"
       register:                        crm_init_result
       failed_when:                     crm_init_result.rc > 1
-      when:
-                                       - node_tier == 'db2'
-                                       - not database_cluster_type == "AFA"
 
 - name:                                "1.17 Generic Pacemaker - Ensure Secondary node joins the Cluster"
   when:
@@ -156,22 +161,24 @@
     password:                          "{{ password_ha_db_cluster | password_hash('sha512', 65534 | random(seed=None) | string) }}"
 
 - name:                                "1.17 Generic Pacemaker - Ensure cluster configuration contains correct details"
+  when:
+                                       - "'corosync' in ansible_facts.packages"
+                                       - ansible_facts.packages.corosync[0].version.split('.')[0] | int != 3
   ansible.builtin.template:
     src:                               corosync.conf.j2
     dest:                              /etc/corosync/corosync.conf
     mode:                              0600
-  when:
-    - "'corosync' in ansible_facts.packages"
-    - ansible_facts.packages.corosync[0].version.split('.')[0] | int != 3
+
 
 - name:                                "1.17 Generic Pacemaker - Ensure cluster configuration contains correct details v3"
+  when:
+                                       - "'corosync' in ansible_facts.packages"
+                                       - ansible_facts.packages.corosync[0].version.split('.')[0] | int == 3
   ansible.builtin.template:
     src:                               corosyncv3.conf.j2
     dest:                              /etc/corosync/corosync.conf
     mode:                              0600
-  when:
-    - "'corosync' in ansible_facts.packages"
-    - ansible_facts.packages.corosync[0].version.split('.')[0] | int == 3
+
 
 - name:                                "1.17 Generic Pacemaker - Ensure the corosync service is restarted on primary node."
   ansible.builtin.systemd:
