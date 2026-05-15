@@ -2,37 +2,75 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Ensure that the exit status of a pipeline command is non-zero if any
-# stage of the pipefile has a non-zero exit status.
-set -o pipefail
+#-------------------------------------------------------------------------------#
+#                                                                               #
+# Initialize colors and debug handling                                          #
+#                                                                               #
+#-------------------------------------------------------------------------------#
+# 'set' command documentation:
+#		https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
+#
+# error codes include those from /usr/include/sysexits.h
+#---------------------------------------+---------------------------------------#
+# region
+# colors for terminal
+bold_red_underscore="\e[1;4;31m"                                                #    CRIT_COLOR
+           bold_red="\e[1;31m"                                                  #   ERROR_COLOR
+              green="\e[1;32m"                                                  # SUCCESS_COLOR
+             yellow="\e[1;33m"                                                  # WARNING_COLOR
+               blue="\e[1;34m"                                                  #   DEBUG_COLOR
+            magenta="\e[1;35m"                                                  #   TRACE_COLOR
+               cyan="\e[1;36m"                                                  #    INFO_COLOR
+              reset="\e[0m"                                                     #   RESET_COLOR
 
-#colors for terminal
-bold_red="\e[1;31m"
-reset_formatting="\e[0m"
+echo -e "\n${cyan}Entering script:  ${BASH_SOURCE[0]}${reset}\n"
+export PS4='+$(basename "${BASH_SOURCE[0]}"):${LINENO}: '                       # Debug prompt format
 
-#External helper functions
-#. "$(dirname "${BASH_SOURCE[0]}")/deploy_utils.sh"
-full_script_path="$(realpath "${BASH_SOURCE[0]}")"
-script_directory="$(dirname "${full_script_path}")"
+# SYSTEM_DEBUG is set by Azure DevOps when the "Enable system diagnostics" option is turned on for the pipeline run.
+# DEBUG is an optional environment variable that can be set to "True" to enable debug mode when running the script outside of Azure DevOps.
+if  [[ ${SYSTEM_DEBUG:-False} = True ]] || \
+    [[ ${DEBUG:-False}        = True ]]; then
+      echo -e "${cyan}--- Enabling debug mode ---${reset}"
+      set -x                                                                    # Enable debug mode
+      export DEBUG=True
+      echo "Environment variables:"
+      printenv | sort
+else
+      export DEBUG=False
+fi
 
-# Detect version from environment variable
-caller_version="${SDAFWZ_CALLER_VERSION:-v2}"
+set -o errexit                                                                  # Same as -e; Exit immediately if a command exits with a non-zero status.
+set -o nounset                                                                  # Same as -u; Treat unset variables as an error when substituting.
+set -o pipefail																																	# Exit with the exit status of the last command in the pipeline that returned a non-zero return value.
+#-------------------------------------------------------------------------------#
+# endregion
 
-#call stack has full script name when using source
+
+#-------------------------------------------------------------------------------#
+#                                                                               #
+# Helpers                                                                       #
+#                                                                               #
+#-------------------------------------------------------------------------------#
+# Example: path_to_script/grand_parent_dir/parent_dir/script_dir/script
+#---------------------------------------+---------------------------------------#
+# region
+full_script_path="$(      realpath ${BASH_SOURCE[0]})"                          # Get the full path of the current script
+script_directory="$(      dirname  ${full_script_path})"                        # Get the directory of the current script
+parent_directory="$(      dirname  ${script_directory})"                        # Get the parent directory of the script directory
+grand_parent_directory="$(dirname  ${parent_directory})"                        # Get the grandparent directory of the script directory
+
+SCRIPT_NAME="$(basename "$0")"
+
+# External helper functions
+# call stack has full script name when using source
 source "${script_directory}/deploy_utils.sh"
-
-#helper files
 source "${script_directory}/helpers/script_helpers.sh"
+#-------------------------------------------------------------------------------#
+# endregion
+
 
 if [ -v ARM_SUBSCRIPTION_ID ]; then
 	subscription="$ARM_SUBSCRIPTION_ID"
-fi
-
-if [ "$DEBUG" = True ]; then
-	# Enable debugging
-	set -x
-	# Exit on error
-	set -o errexit
 fi
 
 
@@ -171,19 +209,6 @@ while :; do
 	esac
 done
 
-DEBUG=False
-
-if [ "$SYSTEM_DEBUG" = True ]; then
-	set -x
-	DEBUG=True
-	echo "Environment variables:"
-	printenv | sort
-
-fi
-export DEBUG
-set -eu
-
-
 while [ -z "${environment}" ]; do
 	read -r -p "Environment name: " environment
 done
@@ -233,6 +258,9 @@ if [ -z "$keyvault" ]; then
 	fi
 	if valid_kv_name "$keyvault"; then
 		echo "Valid keyvault name format specified"
+		DEPLOYER_KEYVAULT="$keyvault"
+		export DEPLOYER_KEYVAULT
+		save_config_vars "${environment_config_information}" "keyvault" "DEPLOYER_KEYVAULT"
 	else
 		printf -v val %-40.40s "$keyvault"
 		print_banner "Set secrets" "The provided keyvault is not valid: ${val}" "error"
@@ -307,40 +335,40 @@ else
 		echo ""
 	else
 		printf -v val %-40.40s "${subscription}"
-		print_banner "Set secrets" "The provided subscription is not valid: ${val}" "error"	
+		print_banner "Set secrets" "The provided subscription is not valid: ${val}" "error"
 		return_code=65 #/* data format error */
 		exit $return_code
 	fi
 fi
 
-print_banner "Set secrets" "Setting secrets for environment ${ZONE_NAME} in keyvault ${keyvault}" "info"
+print_banner "Set secrets" "Setting secrets for environment ${ZONE_NAME}" "info" "in keyvault ${keyvault}"
 
-echo "Key vault:                           ${keyvault}"
-echo "Subscription:                        ${STATE_SUBSCRIPTION}"
+echo -e "Key vault:                           ${keyvault}"
+echo -e "Subscription:                        ${STATE_SUBSCRIPTION}\n"
 
 secret_name="${ZONE_NAME}"-subscription-id
 
 if setSecretValue "${keyvault}" "${STATE_SUBSCRIPTION}" "${secret_name}" "${subscription}" "configuration"; then
-	echo "Secret ${secret_name} set in keyvault ${keyvault}"
+	echo -e "${green}Secret ${secret_name} set in keyvault ${keyvault}${reset}"
 else
-	echo "Failed to set secret ${secret_name} in keyvault ${keyvault}"
+	echo -e "${bold_red}Failed to set secret ${secret_name} in keyvault ${keyvault}${reset}"
 	exit 20
 fi
 
 #turn off output, we do not want to show the details being uploaded to keyvault
 secret_name="${ZONE_NAME}"-client-id
 if setSecretValue "${keyvault}" "${STATE_SUBSCRIPTION}" "${secret_name}" "${client_id}" "configuration"; then
-	echo "Secret ${secret_name} set in keyvault ${keyvault}"
+	echo -e "${green}Secret ${secret_name} set in keyvault ${keyvault}${reset}"
 else
-	echo "Failed to set secret ${secret_name} in keyvault ${keyvault}"
+	echo -e "${bold_red}Failed to set secret ${secret_name} in keyvault ${keyvault}${reset}"
 	exit 20
 fi
 
 secret_name="${ZONE_NAME}"-tenant-id
 if setSecretValue "${keyvault}" "${STATE_SUBSCRIPTION}" "${secret_name}" "${tenant_id}" "configuration"; then
-	echo "Secret ${secret_name} set in keyvault ${keyvault}"
+	echo -e "${green}Secret ${secret_name} set in keyvault ${keyvault}${reset}"
 else
-	echo "Failed to set secret ${secret_name} in keyvault ${keyvault}"
+	echo -e "${bold_red}Failed to set secret ${secret_name} in keyvault ${keyvault}${reset}"
 	exit 20
 fi
 
@@ -348,10 +376,15 @@ if [ 0 = "${deploy_using_msi_only:-}" ]; then
 
 	secret_name="${ZONE_NAME}"-client-secret
 	if setSecretValue "${keyvault}" "${STATE_SUBSCRIPTION}" "${secret_name}" "${client_secret}" "secret"; then
-		echo "Secret ${secret_name} set in keyvault ${keyvault}"
+		echo -e "${green}Secret ${secret_name} set in keyvault ${keyvault}${reset}"
 	else
-		echo "Failed to set secret ${secret_name} in keyvault ${keyvault}"
+		echo -e "${bold_red}Failed to set secret ${secret_name} in keyvault ${keyvault}${reset}"
 		exit 20
 	fi
 fi
+
+
+#----------------------------------- EXIT --------------------------------------#
+echo -e "\n${cyan}Exiting script:  ${BASH_SOURCE[0]}${reset}"
+echo -e   "${cyan}   Return code:  ${return_code}${reset}"
 exit $return_code
