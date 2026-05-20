@@ -29,7 +29,7 @@ provider "azurerm"                     {
                                                   }
 
                                          storage_use_azuread        = true
-                                         use_msi                    = true
+                                         use_msi                    = var.use_spn ? false : true
                                          subscription_id            = var.subscription_id
 
                                        }
@@ -63,7 +63,7 @@ provider "azurerm"                     {
                                          alias                      = "deployer"
 
                                          storage_use_azuread        = true
-                                         use_msi                    = true
+                                         use_msi                    = var.use_spn ? false : true
                                          subscription_id            = var.subscription_id
                                          client_id                  = var.use_spn ? data.azurerm_key_vault_secret.client_id[0].value : null
                                          client_secret              = var.use_spn ? ephemeral.azurerm_key_vault_secret.client_secret[0].value : null
