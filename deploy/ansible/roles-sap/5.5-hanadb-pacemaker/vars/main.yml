@@ -32,6 +32,14 @@ cluster_status_report_wait_in_s:       60
 hsr_status_report_wait_in_s:           60
 rescue_hsr_status_report_wait_in_s:    120
 
+# Retry/delay settings for the SAPHanaSR hook installation verification.
+# Made configurable (instead of hard-coded) so that environments with slower
+# HANA System Replication catch-up can be tuned without code changes.
+saphanasr_hook_verification_retries:          20
+saphanasr_hook_verification_delay_in_s:       30
+saphanasr_hook_verification_rescue_retries:   20
+saphanasr_hook_verification_rescue_delay_in_s: 30
+
 
 # The following values should be same as iSCSI configuration
 # run 'sudo targetcli ls' on iSCSI target virtual machines to get all iSCSI configuration

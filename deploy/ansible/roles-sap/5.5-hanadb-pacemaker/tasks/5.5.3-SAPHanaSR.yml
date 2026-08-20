@@ -216,8 +216,8 @@
             chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/{{ hostvars[primary_instance_name]['virtual_host'] }}/trace
           register:                    saphanasr_verification
           until:                       saphanasr_verification.stdout is search("SOK")
-          retries:                     20
-          delay:                       30
+          retries:                     "{{ saphanasr_hook_verification_retries }}"
+          delay:                       "{{ saphanasr_hook_verification_delay_in_s }}"
 
       rescue:
         - name:                        "[Rescue] 5.5.3 HANA Pacemaker - Reload HA Provides"
@@ -245,16 +245,83 @@
           when:                        inventory_hostname == primary_instance_name
           become_user:                 "{{ db_sid | lower }}adm"
           become:                      true
-          ansible.builtin.shell: |
+          block:
+            - name:                    "5.5.3 HANA Pacemaker - [Rescue] - Verify the hook Installation"
+              ansible.builtin.shell: |
                                        set -o pipefail
                                        awk '/ha_dr_SAPHanaSR.*crm_attribute/ \
                                        { printf "%s %s %s %s\n",$2,$3,$5,$16 }' nameserver_*
-          args:
-            chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/{{ hostvars[primary_instance_name]['virtual_host'] }}/trace
-          register:                    saphanasr_verification
-          until:                       saphanasr_verification.stdout is search("SOK")
-          retries:                     20
-          delay:                       30
+              args:
+                chdir:                 /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/{{ hostvars[primary_instance_name]['virtual_host'] }}/trace
+              register:                saphanasr_verification
+              until:                   saphanasr_verification.stdout is search("SOK")
+              retries:                 "{{ saphanasr_hook_verification_rescue_retries }}"
+              delay:                   "{{ saphanasr_hook_verification_rescue_delay_in_s }}"
+
+          rescue:
+            # The hook is still reporting SFAIL after both the initial wait window and the
+            # HADR provider reload. Retrying further will not help if HANA System Replication
+            # itself never reached a healthy state, so capture diagnostics and fail clearly
+            # instead of surfacing a generic "retries exhausted" error.
+            - name:                    "[Diagnostics] 5.5.3 HANA Pacemaker - Capture HANA System Replication status"
+              ansible.builtin.shell: |
+                                       set -o pipefail
+                                       (cdpy && python systemReplicationStatus.py)
+              register:                saphanasr_diag_replication_status
+              changed_when:            false
+              failed_when:             false
+              vars:
+                allow_world_readable_tmpfiles: true
+              environment:
+                PATH:                  /usr/bin:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                DIR_LIBRARY:           /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                LD_LIBRARY_PATH:       /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                SAPSYSTEMNAME:         "{{ db_sid | upper }}"
+
+            - name:                    "[Diagnostics] 5.5.3 HANA Pacemaker - Capture hdbnsutil replication state"
+              ansible.builtin.command: hdbnsutil -sr_state
+              register:                saphanasr_diag_sr_state
+              changed_when:            false
+              failed_when:             false
+              args:
+                chdir:                 /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+              environment:
+                PATH:                  /usr/bin:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                DIR_LIBRARY:           /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                LD_LIBRARY_PATH:       /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                SAPSYSTEMNAME:         "{{ db_sid | upper }}"
+
+            - name:                    "[Diagnostics] 5.5.3 HANA Pacemaker - Capture last hook trace entries"
+              ansible.builtin.shell: |
+                                       set -o pipefail
+                                       tail -n 50 nameserver_*.trc | grep -i ha_dr_saphanasr
+              register:                saphanasr_diag_hook_trace
+              changed_when:            false
+              failed_when:             false
+              args:
+                chdir:                 /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/{{ hostvars[primary_instance_name]['virtual_host'] }}/trace
+
+            - name:                    "[Diagnostics] 5.5.3 HANA Pacemaker - Display captured diagnostics"
+              ansible.builtin.debug:
+                msg: |
+                                       === systemReplicationStatus.py ===
+                                       {{ saphanasr_diag_replication_status.stdout | default('n/a') }}
+                                       === hdbnsutil -sr_state ===
+                                       {{ saphanasr_diag_sr_state.stdout | default('n/a') }}
+                                       === Last hook trace entries (nameserver_*.trc) ===
+                                       {{ saphanasr_diag_hook_trace.stdout | default('n/a') }}
+
+            - name:                    "5.5.3 HANA Pacemaker - Fail with diagnostic summary"
+              ansible.builtin.fail:
+                msg: >-
+                                       SAPHanaSR hook verification failed after
+                                       {{ saphanasr_hook_verification_retries }} initial retries and
+                                       {{ saphanasr_hook_verification_rescue_retries }} rescue retries.
+                                       HANA System Replication did not report an SOK hook status in time.
+                                       Review the captured systemReplicationStatus.py / hdbnsutil -sr_state /
+                                       hook trace output above to determine whether this is a genuine
+                                       replication problem (network, log shipping delay, secondary not
+                                       synced) rather than an automation timeout.
 
     - name:                            "5.5.3 HANA Pacemaker - Log that the hook script is working as expected"
       when:                            inventory_hostname == primary_instance_name
