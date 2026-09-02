@@ -328,6 +328,12 @@ if [ 0 = "${deploy_using_msi_only:-}" ]; then
 	fi
 
 fi
+# Even when deploying using MSI, fall back to any client_secret already supplied
+# (for example via ARM_CLIENT_SECRET) so it is available to persist below. Downstream
+# modules (e.g. SAP Library) may be configured with use_spn=true and therefore still
+# require the SPN client-secret to exist in the keyvault, regardless of how the
+# control plane itself was bootstrapped.
+: "${client_secret:=${ARM_CLIENT_SECRET:-}}"
 if [ -z "${subscription}" ]; then
 	read -r -p "SPN Subscription: " subscription
 else
@@ -372,7 +378,7 @@ else
 	exit 20
 fi
 
-if [ 0 = "${deploy_using_msi_only:-}" ]; then
+if [ -n "${client_secret:-}" ]; then
 
 	secret_name="${ZONE_NAME}"-client-secret
 	if setSecretValue "${keyvault}" "${STATE_SUBSCRIPTION}" "${secret_name}" "${client_secret}" "secret"; then

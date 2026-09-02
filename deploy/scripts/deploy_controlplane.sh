@@ -289,7 +289,6 @@ if [ -f "${deployer_dirname}/.terraform/terraform.tfstate" ]; then
 				else
 					step=0
 				fi
-				step=3
 				save_config_vars "${deployer_environment_file_name}" "DEPLOYER_KEYVAULT" "keyvault" "STATE_SUBSCRIPTION" "REMOTE_STATE_SA" "REMOTE_STATE_RG" "ARM_SUBSCRIPTION_ID"
 			fi
 
@@ -593,10 +592,14 @@ if [ 0 != "$step" ]; then
 			allParameters+=(--subscription "${subscription:-$ARM_SUBSCRIPTION_ID}")
 			allParameters+=(--tenant_id "${tenant_id:-$ARM_TENANT_ID}")
 			allParameters+=(--spn_id "${client_id:-$ARM_CLIENT_ID}")
-			ss
-			if [ "$deploy_using_msi_only" -eq 0 ]; then
+			# Persist the client-secret whenever one is actually available, even when the
+			# deployer itself is bootstrapped using MSI: downstream modules (for example
+			# SAP Library) may still be configured to use_spn=true and therefore require
+			# the SPN client-secret to be present in the keyvault.
+			if [ -n "${client_secret:-$ARM_CLIENT_SECRET}" ]; then
 				allParameters+=(--spn_secret "${client_secret:-$ARM_CLIENT_SECRET}")
-			else
+			fi
+			if [ "$deploy_using_msi_only" -eq 1 ]; then
 				allParameters+=(--msi)
 			fi
 			
