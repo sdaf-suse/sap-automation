@@ -34,6 +34,16 @@
     var:                               ansible_facts.services
     verbosity:                         2
 
+# Build a list of the bare (suffix-stripped) names of services that are actually
+# present on the host, so that services which are not installed (for example
+# firewalld on SLE16, where it is not installed by default) can be skipped
+# instead of causing the module to fail with "Could not find the requested service".
+- name:                                "1.16 Services - Determine installed services {{ distribution_id }}"
+  ansible.builtin.set_fact:
+    installed_service_names:          "{{ ansible_facts.services.keys() |
+                                         map('regex_replace', '\\.service$', '') |
+                                         list }}"
+
 # Extract the list of service names whose state match the specified value and
 # pass them as the argument to the name parameter; this is the recommended
 # approach as it only calls the underlying distro specific service manager
@@ -45,7 +55,7 @@
   loop:                                "{{ services_to_process |
                                          selectattr('state', 'equalto', 'started') |
                                          list }}"
-#  when:                                item.service in ansible_facts.services
+  when:                                item.service in installed_service_names
 
 - name:                                "1.16 Services - Restart Services {{ distribution_id }}"
   ansible.builtin.service:
@@ -54,7 +64,7 @@
   loop:                                "{{ services_to_process |
                                          selectattr('state', 'equalto', 'restarted') |
                                          list }}"
-#  when:                                item.service in ansible_facts.services
+  when:                                item.service in installed_service_names
 
 - name:                                "1.16 Services - Reload Services {{ distribution_id }}"
   ansible.builtin.service:
@@ -63,7 +73,7 @@
   loop:                                "{{ services_to_process |
                                          selectattr('state', 'equalto', 'reloded') |
                                          list }}"
-#  when:                                item.service in ansible_facts.services
+  when:                                item.service in installed_service_names
 
 - name:                                "1.16 Services - Enable Services {{ distribution_id }}"
   ansible.builtin.service:
@@ -72,7 +82,7 @@
   loop:                                "{{ services_to_process |
                                          selectattr('state', 'equalto', 'enabled') |
                                          list }}"
-#  when:                                item.service in ansible_facts.services
+  when:                                item.service in installed_service_names
 
 - name:                                "1.16 Services - Stop Services {{ distribution_id }}"
   ansible.builtin.service:
@@ -81,7 +91,7 @@
   loop:                                "{{ services_to_process |
                                            selectattr('state', 'equalto', 'stopped') |
                                            list }}"
-#  when:                                item.service in ansible_facts.services
+  when:                                item.service in installed_service_names
 
 - name:                                "1.16 Services - Disable Services {{ distribution_id }}"
   ansible.builtin.service:
@@ -90,7 +100,7 @@
   loop:                                "{{ services_to_process |
                                            selectattr('state', 'equalto', 'disabled') |
                                            list }}"
-#  when:                                item.service in ansible_facts.services
+  when:                                item.service in installed_service_names
 
 # /*----------------------------------------------------------------------------8
 # |                             Custom services                                 |
@@ -124,6 +134,7 @@
       loop:                            "{{ custom_services_to_process |
                                             selectattr('state', 'equalto', 'started') |
                                             list }}"
+      when:                            item.service in installed_service_names
 
     - name:                            "1.16 Services - Restart custom defined services {{ distribution_id }}"
       ansible.builtin.service:
@@ -132,6 +143,7 @@
       loop:                            "{{ custom_services_to_process |
                                             selectattr('state', 'equalto', 'restarted') |
                                             list }}"
+      when:                            item.service in installed_service_names
 
     - name:                            "1.16 Services - Reload custom defined services {{ distribution_id }}"
       ansible.builtin.service:
@@ -140,6 +152,7 @@
       loop:                            "{{ custom_services_to_process |
                                             selectattr('state', 'equalto', 'reloded') |
                                             list }}"
+      when:                            item.service in installed_service_names
 
     - name:                            "1.16 Services - Enable custom defined services {{ distribution_id }}"
       ansible.builtin.service:
@@ -148,6 +161,7 @@
       loop:                            "{{ custom_services_to_process |
                                           selectattr('state', 'equalto', 'enabled') |
                                           list }}"
+      when:                            item.service in installed_service_names
 
     - name:                            "1.16 Services - Stop custom defined services {{ distribution_id }}"
       ansible.builtin.service:
@@ -156,6 +170,7 @@
       loop:                            "{{ custom_services_to_process |
                                             selectattr('state', 'equalto', 'stopped') |
                                             list }}"
+      when:                            item.service in installed_service_names
 
     - name:                            "1.16 Services - Disable custom defined services {{ distribution_id }}"
       ansible.builtin.service:
@@ -164,6 +179,7 @@
       loop:                            "{{ custom_services_to_process |
                                           selectattr('state', 'equalto', 'disabled') |
                                           list }}"
+      when:                            item.service in installed_service_names
 
   when:                                custom_services_to_process is defined
 

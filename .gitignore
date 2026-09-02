@@ -96,3 +96,20 @@ __pycache__
 
 .idea/
 
+# hve-core files
+.copilot-tracking/*
+.copilot-tools/*
+.tasks-local/*
+
+# octane files
+docs/projects/*
+docs/adr/*
+docs/contributing/*
+
+# Python test coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.pytest_cache/
