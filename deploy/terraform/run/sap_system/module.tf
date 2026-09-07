@@ -10,11 +10,11 @@
 
 module "sap_namegenerator" {
   source                                        = "../../terraform-units/modules/sap_namegenerator"
-  environment                                   = local.infrastructure.environment
-  location                                      = local.infrastructure.region
-  codename                                      = lower(try(local.infrastructure.codename, ""))
-  random_id                                     = coalesce(var.custom_random_id, module.common_infrastructure.random_id)
-  sap_vnet_name                                 = local.vnet_logical_name
+  environment                                   = var.environment
+  location                                      = var.location
+  codename                                      = lower(var.codename)
+  random_id                                     = length(var.custom_random_id) > 0 ? var.custom_random_id : module.common_infrastructure.random_id
+  sap_vnet_name                                 = var.network_logical_name
   sap_sid                                       = local.sap_sid
   db_sid                                        = local.db_sid
   web_sid                                       = local.web_sid
@@ -54,6 +54,7 @@ module "sap_namegenerator" {
 module "common_infrastructure" {
   source                                        = "../../terraform-units/modules/sap_system/common_infrastructure"
   providers                                     = {
+                                                    azurerm.deployer                 = azurerm.deployer
                                                     azurerm.main                     = azurerm.system
                                                     azurerm.dnsmanagement            = azurerm.dnsmanagement
                                                     azurerm.privatelinkdnsmanagement = azurerm.privatelinkdnsmanagement
@@ -66,7 +67,6 @@ module "common_infrastructure" {
   custom_disk_sizes_filename                    = try(coalesce(var.custom_disk_sizes_filename, var.db_disk_sizes_filename), "")
   custom_prefix                                 = var.use_prefix ? var.custom_prefix : " "
   database                                      = local.database
-  database_dual_nics                            = var.database_dual_nics
   deploy_application_security_groups            = var.deploy_application_security_groups
   deployer_tfstate                              = length(var.deployer_tfstate_key) > 0 ? data.terraform_remote_state.deployer[0].outputs : null
   deployment                                    = var.deployment
@@ -82,13 +82,12 @@ module "common_infrastructure" {
   key_vault                                     = local.key_vault
   landscape_tfstate                             = data.terraform_remote_state.landscape.outputs
   license_type                                  = var.license_type
-  naming                                        = length(var.name_override_file) > 0 ? local.custom_names : module.sap_namegenerator.naming
+  naming                                        = length(var.name_override_file) > 0 ? local.custom_names : local.generator_as_lists
   NFS_provider                                  = var.NFS_provider
   options                                       = local.options
   sapmnt_private_endpoint_id                    = var.sapmnt_private_endpoint_id
   sapmnt_volume_size                            = var.sapmnt_volume_size
   scaleset_id                                   = var.scaleset_id
-  service_principal                             = var.use_spn ? local.service_principal : local.account
   tags                                          = var.tags
   terraform_template_version                    = var.terraform_template_version
   use_private_endpoint                          = var.use_private_endpoint
@@ -96,6 +95,8 @@ module "common_infrastructure" {
   use_scalesets_for_deployment                  = var.use_scalesets_for_deployment
   dns_settings                                  = local.dns_settings
   enable_firewall_for_keyvaults_and_storage     = var.enable_firewall_for_keyvaults_and_storage
+  use_AFS_for_shared_storage                    = var.use_AFS_for_shared_storage
+  AFS_enable_encryption_in_transit              = var.AFS_enable_encryption_in_transit
 
 }
 
@@ -108,11 +109,10 @@ module "hdb_node" {
   source                                        = "../../terraform-units/modules/sap_system/hdb_node"
   depends_on                                    = [module.common_infrastructure]
   providers                                     = {
-                                                    azurerm.deployer                 = azurerm
+                                                    azurerm.deployer                 = azurerm.deployer
                                                     azurerm.main                     = azurerm.system
                                                     azurerm.dnsmanagement            = azurerm.dnsmanagement
                                                     azurerm.privatelinkdnsmanagement = azurerm.privatelinkdnsmanagement
-                                                    # azapi.api                                 = azapi.api
                                                   }
 
   admin_subnet                                  = module.common_infrastructure.admin_subnet
@@ -122,8 +122,6 @@ module "hdb_node" {
   custom_disk_sizes_filename                    = try(coalesce(var.custom_disk_sizes_filename, var.db_disk_sizes_filename), "")
   database                                      = local.database
   database_active_active                        = var.database_active_active
-  database_dual_nics                            = try(module.common_infrastructure.admin_subnet, null) == null ? false : var.database_dual_nics
-  enable_storage_nic                            = var.enable_storage_nic
   database_server_count                         = upper(try(local.database.platform, "HANA")) == "HANA" ? (
                                                     local.database.high_availability ? (
                                                       2 * (var.database_server_count + var.stand_by_node_count)) : (
@@ -139,19 +137,20 @@ module "hdb_node" {
   db_asg_id                                     = module.common_infrastructure.db_asg_id
   db_subnet                                     = module.common_infrastructure.db_subnet
   deploy_application_security_groups            = var.deploy_application_security_groups
+  deployer_tfstate                              = try(data.terraform_remote_state.deployer[0].outputs, {})
   deployment                                    = var.deployment
   dns_settings                                  = local.dns_settings
   enable_firewall_for_keyvaults_and_storage     = var.enable_firewall_for_keyvaults_and_storage
+  enable_storage_nic                            = var.enable_storage_nic
   fencing_role_name                             = var.fencing_role_name
   hana_ANF_volumes                              = local.hana_ANF_volumes
   hanashared_id                                 = length(var.hanashared_id) > 0 ? (length(var.hanashared_id[0]) > 0 ? var.hanashared_id : []) : []
   hanashared_private_endpoint_id                = length(var.hanashared_private_endpoint_id) > 0 ? (length(var.hanashared_private_endpoint_id[0]) > 0 ? var.hanashared_private_endpoint_id : []) : []
-  use_single_hana_shared                        = var.use_single_hana_shared
   hanashared_volume_size                        = var.hanashared_volume_size
   infrastructure                                = local.infrastructure
   landscape_tfstate                             = data.terraform_remote_state.landscape.outputs
   license_type                                  = var.license_type
-  naming                                        = length(var.name_override_file) > 0 ? local.custom_names : module.sap_namegenerator.naming
+  naming                                        = length(var.name_override_file) > 0 ? local.custom_names : local.generator_as_lists
   NFS_provider                                  = var.NFS_provider
   observer_vm_size                              = var.observer_vm_size
   observer_vm_tags                              = var.observer_vm_tags
@@ -167,7 +166,7 @@ module "hdb_node" {
   sid_password                                  = module.common_infrastructure.sid_password
   sid_username                                  = module.common_infrastructure.sid_username
   storage_bootdiag_endpoint                     = module.common_infrastructure.storage_bootdiag_endpoint
-  storage_subnet                                = module.common_infrastructure.storage_subnet
+  storage_subnet_id                             = module.common_infrastructure.storage_subnet_id
   tags                                          = var.tags
   terraform_template_version                    = var.terraform_template_version
   use_admin_nic_suffix_for_observer             = var.use_admin_nic_suffix_for_observer
@@ -178,6 +177,7 @@ module "hdb_node" {
   use_private_endpoint                          = var.use_private_endpoint
   use_scalesets_for_deployment                  = var.use_scalesets_for_deployment
   use_secondary_ips                             = var.use_secondary_ips
+  use_single_hana_shared                        = var.use_single_hana_shared
 }
 
 #########################################################################################
@@ -189,7 +189,7 @@ module "hdb_node" {
 module "app_tier" {
   source                                        = "../../terraform-units/modules/sap_system/app_tier"
   providers                                     = {
-                                                    azurerm.deployer                 = azurerm
+                                                    azurerm.deployer                 = azurerm.deployer
                                                     azurerm.main                     = azurerm.system
                                                     azurerm.dnsmanagement            = azurerm.dnsmanagement
                                                     azurerm.privatelinkdnsmanagement = azurerm.privatelinkdnsmanagement
@@ -209,9 +209,10 @@ module "app_tier" {
   infrastructure                                = local.infrastructure
   landscape_tfstate                             = data.terraform_remote_state.landscape.outputs
   license_type                                  = var.license_type
-  naming                                        = length(var.name_override_file) > 0 ? local.custom_names : module.sap_namegenerator.naming
+  naming                                        = length(var.name_override_file) > 0 ? local.custom_names : local.generator_as_lists
   network_location                              = module.common_infrastructure.network_location
   network_resource_group                        = module.common_infrastructure.network_resource_group
+  NFS_provider                                  = var.NFS_provider
   options                                       = local.options
   order_deployment                              = null
   ppg                                           = var.use_app_proximityplacementgroups ? module.common_infrastructure.app_ppg : module.common_infrastructure.ppg
@@ -244,7 +245,7 @@ module "app_tier" {
 module "anydb_node" {
   source                                        = "../../terraform-units/modules/sap_system/anydb_node"
   providers                                     = {
-                                                    azurerm.deployer                 = azurerm
+                                                    azurerm.deployer                 = azurerm.deployer
                                                     azurerm.main                     = azurerm.system
                                                     azurerm.dnsmanagement            = azurerm.dnsmanagement
                                                     azurerm.privatelinkdnsmanagement = azurerm.privatelinkdnsmanagement
@@ -273,7 +274,7 @@ module "anydb_node" {
   infrastructure                                = local.infrastructure
   landscape_tfstate                             = data.terraform_remote_state.landscape.outputs
   license_type                                  = var.license_type
-  naming                                        = length(var.name_override_file) > 0 ? local.custom_names : module.sap_namegenerator.naming
+  naming                                        = length(var.name_override_file) > 0 ? local.custom_names : local.generator_as_lists
   observer_vm_size                              = var.observer_vm_size
   observer_vm_tags                              = var.observer_vm_tags
   observer_vm_zones                             = var.observer_vm_zones
@@ -315,6 +316,7 @@ module "output_files" {
   source                                        = "../../terraform-units/modules/sap_system/output_files"
   depends_on                                    = [module.anydb_node, module.common_infrastructure, module.app_tier, module.hdb_node]
   providers                                     = {
+                                                    azurerm.deployer       = azurerm.deployer
                                                     azurerm.main           = azurerm.system
                                                     azurerm.dnsmanagement  = azurerm.dnsmanagement
                                                     # azapi.api                                 = azapi.api
@@ -324,8 +326,8 @@ module "output_files" {
   authentication_type                           = try(local.application_tier.authentication.type, "key")
   configuration_settings                        = var.configuration_settings
   database                                      = local.database
-  database_shared_disks                         = upper(try(local.database.platform, "HANA")) == "HANA" ? (
-                                                    module.hdb_node.database_shared_disks) : (
+  database_shared_disks                         = concat(
+                                                    module.hdb_node.database_shared_disks,
                                                     module.anydb_node.database_shared_disks
                                                   )
   is_use_fence_kdump                            = var.use_fence_kdump
@@ -346,7 +348,7 @@ module "output_files" {
   #  Database tier                                                                        #
   #########################################################################################
   database_admin_ips                            = upper(try(local.database.platform, "HANA")) == "HANA" ? (
-                                                    module.hdb_node.db_admin_ip) : (
+                                                    var.database_dual_nics ? module.hdb_node.db_admin_ips : module.hdb_node.database_server_ips ) : (
                                                     module.anydb_node.database_server_admin_ips
                                                   ) #TODO Change to use Admin IP
   database_authentication_type                  = try(local.database.authentication.type, "key")
@@ -379,11 +381,11 @@ module "output_files" {
                                                   )))
   loadbalancers                                 = module.hdb_node.loadbalancers
 
-  subnet_cidr_anf                             = module.hdb_node.ANF_subnet_prefix
-  subnet_cidr_app                             = module.app_tier.subnet_cidr_app
-  subnet_cidr_client                          = module.common_infrastructure.subnet_cidr_client
-  subnet_cidr_db                              = module.common_infrastructure.subnet_cidr_db
-  subnet_cidr_storage                         = module.common_infrastructure.subnet_cidr_storage
+  subnet_cidr_anf                               = module.hdb_node.ANF_subnet_prefix
+  subnet_cidr_app                               = module.app_tier.subnet_cidr_app
+  subnet_cidr_client                            = module.common_infrastructure.subnet_cidr_client
+  subnet_cidr_db                                = module.common_infrastructure.subnet_cidr_db
+  subnet_cidr_storage                           = module.common_infrastructure.subnet_cidr_storage
 
   #########################################################################################
   #  SAP Application information                                                          #
@@ -398,7 +400,10 @@ module "output_files" {
                                                     module.hdb_node.observer_vms) : (
                                                     module.anydb_node.observer_vms
                                                   )
-
+  observer_shared_disks                         = upper(try(local.database.platform, "HANA")) == "HANA" ? (
+                                                    module.hdb_node.observer_shared_disks) : (
+                                                    try(module.anydb_node.observer_shared_disks, [])
+                                                  )
   platform                                      = upper(try(local.database.platform, "HANA"))
   sap_sid                                       = local.sap_sid
   web_sid                                       = var.web_sid
@@ -416,6 +421,7 @@ module "output_files" {
   ers_instance_number                           = var.ers_instance_number
   ers_server_loadbalancer_ip                    = module.app_tier.ers_server_loadbalancer_ip
   pas_instance_number                           = var.pas_instance_number
+  app_instance_number                           = var.app_instance_number
   sid_keyvault_user_id                          = module.common_infrastructure.sid_keyvault_user_id
   scs_shared_disks                              = module.app_tier.scs_asd
   scs_cluster_loadbalancer_ip                   = module.app_tier.cluster_loadbalancer_ip
@@ -445,7 +451,11 @@ module "output_files" {
   hana_data                                     = module.hdb_node.hana_data_ANF_volumes
   hana_log                                      = module.hdb_node.hana_log_ANF_volumes
   hana_shared                                   = var.NFS_provider == "ANF" ? module.hdb_node.hana_shared : module.hdb_node.hana_shared_afs_path
-  usr_sap                                       = module.common_infrastructure.usrsap_path
+  usr_sap                                       = var.NFS_provider == "AFS" && var.AFS_usr_sap && length(module.common_infrastructure.sapmnt_path) > 0 ? (
+                                                    format("%s/usrsapapp%s", module.common_infrastructure.sapmnt_path, local.sap_sid)) : (
+                                                    module.common_infrastructure.usrsap_path
+                                                  )
+  use_AFS_encryption_in_transit                 = module.common_infrastructure.use_AFS_encryption_in_transit
 
   #########################################################################################
   #  DNS information                                                                      #
@@ -453,7 +463,7 @@ module "output_files" {
   dns                                           = try(data.terraform_remote_state.landscape.outputs.dns_label, "")
   use_custom_dns_a_registration                 = try(data.terraform_remote_state.landscape.outputs.use_custom_dns_a_registration, false)
   management_dns_subscription_id                = try(data.terraform_remote_state.landscape.outputs.management_dns_subscription_id, null)
-  management_dns_resourcegroup_name             = try(data.terraform_remote_state.landscape.outputs.management_dns_resourcegroup_name, local.saplib_resource_group_name)
+  management_dns_resourcegroup_name             = try(data.terraform_remote_state.landscape.outputs.management_dns_resourcegroup_name, local.tfstate_storage_account_resource_group_name)
   dns_zone_names                                = var.dns_zone_names
   dns_a_records_for_secondary_names             = var.dns_a_records_for_secondary_names
 
@@ -471,10 +481,13 @@ module "output_files" {
   #########################################################################################
   #  Miscallaneous                                                                        #
   #########################################################################################
+  deploy_monitoring_extension                   = var.deploy_v1_monitoring_extension
   use_simple_mount                              = local.validated_use_simple_mount
   upgrade_packages                              = var.upgrade_packages
+  suse_subscription_id                          = var.suse_subscription_id
   scale_out                                     = var.database_HANA_use_scaleout_scenario
   scale_out_no_standby_role                     = var.database_HANA_no_standby_role
+  user_assigned_identity_id                     = var.user_assigned_identity_id
 
   #########################################################################################
   #  iSCSI                                                                                #
@@ -489,13 +502,6 @@ module "output_files" {
   ams_resource_id                               = try(coalesce(var.ams_resource_id, try(data.terraform_remote_state.landscape.outputs.ams_resource_id, "")),"")
   enable_ha_monitoring                          = var.enable_ha_monitoring
   enable_os_monitoring                          = var.enable_os_monitoring
-
-  #########################################################################################
-  #  SAP CAL                                                                              #
-  #########################################################################################
-  enable_sap_cal                                = var.enable_sap_cal
-  calapi_kv                                     = var.calapi_kv
-  sap_cal_product_name                          = var.sap_cal_product_name
 
   site_information                              = module.hdb_node.site_information
 }

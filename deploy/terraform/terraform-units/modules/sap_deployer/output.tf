@@ -15,7 +15,7 @@ Description:
 
 output "created_resource_group_id" {
   description                          = "Created resource group ID"
-  value                                = local.resource_group_exists ? (
+  value                                = var.infrastructure.resource_group.exists ? (
                                            data.azurerm_resource_group.deployer[0].id) : (
                                            azurerm_resource_group.deployer[0].id
                                          )
@@ -23,7 +23,7 @@ output "created_resource_group_id" {
 
 output "created_resource_group_subscription_id" {
   description                          = "Created resource group' subscription ID"
-  value                                = local.resource_group_exists ? (
+  value                                = var.infrastructure.resource_group.exists ? (
                                            split("/", data.azurerm_resource_group.deployer[0].id))[2] : (
                                            split("/", azurerm_resource_group.deployer[0].id)[2]
                                          )
@@ -32,7 +32,7 @@ output "created_resource_group_subscription_id" {
 // Deployer resource group name
 output "created_resource_group_name" {
   description                          = "Created resource group name"
-  value                                = local.resource_group_exists ? (
+  value                                = var.infrastructure.resource_group.exists ? (
                                            data.azurerm_resource_group.deployer[0].name) : (
                                            azurerm_resource_group.deployer[0].name
                                          )
@@ -40,7 +40,7 @@ output "created_resource_group_name" {
 
 output "created_resource_group_location" {
   description                          = "Created resource group's location"
-  value                                = local.resource_group_exists ? (
+  value                                = var.infrastructure.resource_group.exists ? (
                                            data.azurerm_resource_group.deployer[0].location) : (
                                            azurerm_resource_group.deployer[0].location
                                          )
@@ -56,7 +56,7 @@ output "created_resource_group_location" {
 // Unique ID for deployer
 output "deployer_id" {
   description                          = "Random ID for deployer"
-    value                              = random_id.deployer
+  value                                = random_id.deployer
 }
 
 // Details of the user assigned identity for deployer(s)
@@ -77,13 +77,19 @@ output "deployer_private_ip_address" {
 
 output "deployer_system_assigned_identity" {
   description                          = "Deployer System Assigned Identity"
-  value                                = azurerm_linux_virtual_machine.deployer[*].identity[0].principal_id
+  value                                = try(azurerm_linux_virtual_machine.deployer[*].identity[0].principal_id, null)
 }
 
 output "deployer_user_assigned_identity" {
   description                          = "Deployer System Assigned Identity"
   value                                = length(var.deployer.user_assigned_identity_id) > 0 ? data.azurerm_user_assigned_identity.deployer[0].principal_id : azurerm_user_assigned_identity.deployer[0].principal_id
 }
+
+output "deployer_client_id" {
+  description                          = "Deployer User Assigned Identity (Client Id)"
+  value                                = length(var.deployer.user_assigned_identity_id) > 0 ? data.azurerm_user_assigned_identity.deployer[0].client_id : azurerm_user_assigned_identity.deployer[0].client_id
+}
+
 ###############################################################################
 #                                                                             #
 #                                  Network                                    #
@@ -93,33 +99,37 @@ output "deployer_user_assigned_identity" {
 // Details of management vnet that is deployed/imported
 output "vnet_mgmt_id" {
   description                          = "Management VNet ID"
-  value                                = local.management_virtual_network_exists ? data.azurerm_virtual_network.vnet_mgmt[0].id : azurerm_virtual_network.vnet_mgmt[0].id
+  value                                = var.infrastructure.virtual_network.management.exists ? data.azurerm_virtual_network.vnet_mgmt[0].id : azurerm_virtual_network.vnet_mgmt[0].id
 }
 
 // Details of management subnet that is deployed/imported
 output "subnet_mgmt_id" {
   description                          = "Management Subnet ID"
-  value                                = local.management_subnet_exists ? data.azurerm_subnet.subnet_mgmt[0].id : azurerm_subnet.subnet_mgmt[0].id
+  value                                = var.infrastructure.virtual_network.management.subnet_mgmt.exists ? data.azurerm_subnet.subnet_mgmt[0].id : azurerm_subnet.subnet_mgmt[0].id
 }
 
 // Details of management subnet that is deployed/imported
 output "subnet_mgmt_address_prefixes" {
   description                          = "Management Subnet Address Prefixes"
-  value                                = local.management_subnet_exists ? data.azurerm_subnet.subnet_mgmt[0].address_prefixes : azurerm_subnet.subnet_mgmt[0].address_prefixes
+  value                                = var.infrastructure.virtual_network.management.subnet_mgmt.exists ? data.azurerm_subnet.subnet_mgmt[0].address_prefixes : azurerm_subnet.subnet_mgmt[0].address_prefixes
 }
 
 // Deatils of webapp subnet that is deployed/imported
 output "subnet_webapp_id" {
   description                          = "Webapp Subnet ID"
-  value                                = var.use_webapp ? (local.webapp_subnet_exists ? data.azurerm_subnet.webapp[0].id : azurerm_subnet.webapp[0].id) : ""
+  value                                = var.app_service.use ? (var.infrastructure.virtual_network.management.subnet_webapp.exists ? data.azurerm_subnet.webapp[0].id : azurerm_subnet.webapp[0].id) : ""
+}
+
+output "agent_subnet_id" {
+  description                          = "Agent Subnet ID"
+  value                                = var.infrastructure.dev_center_deployment ? (var.infrastructure.virtual_network.management.subnet_agent.exists ? data.azurerm_subnet.subnet_agent[0].id : azurerm_subnet.subnet_agent[0].id) : ""
 }
 
 // Details of the management vnet NSG that is deployed/imported
 output "nsg_mgmt" {
   description                          = "Management VNet NSG"
-  value                                = local.management_subnet_nsg_exists ? data.azurerm_network_security_group.nsg_mgmt[0] : azurerm_network_security_group.nsg_mgmt[0]
+  value                                = var.infrastructure.virtual_network.management.subnet_mgmt.nsg.exists ? data.azurerm_network_security_group.nsg_mgmt[0] : azurerm_network_security_group.nsg_mgmt[0]
 }
-
 
 output "random_id" {
   description                          = "Random ID for deployer"
@@ -128,7 +138,7 @@ output "random_id" {
 
 output "user_vault_name" {
   description                          = "Key Vault Name"
-  value                                = var.key_vault.kv_exists ? data.azurerm_key_vault.kv_user[0].name : azurerm_key_vault.kv_user[0].name
+  value                                = var.key_vault.exists ? data.azurerm_key_vault.kv_user[0].name : azurerm_key_vault.kv_user[0].name
 }
 
 ###############################################################################
@@ -140,13 +150,13 @@ output "user_vault_name" {
 // output the secret name of private key
 output "ppk_secret_name" {
   description                          = "Private Key Secret Name"
-  value                                = local.enable_key ? local.ppk_secret_name : ""
+  value                                = local.enable_key ? local.private_key_secret_name : ""
 }
 
 // output the secret name of public key
 output "pk_secret_name" {
   description                          = "Public Key Secret Name"
-  value                                = local.enable_key ? local.pk_secret_name : ""
+  value                                = local.enable_key ? local.public_key_secret_name : ""
 }
 
 output "username_secret_name" {
@@ -168,7 +178,7 @@ output "deployer_user" {
 
 output "deployer_keyvault_user_arm_id" {
   description                          = "Azure resource ID of the deployer key vault"
-  value                                = var.key_vault.kv_exists ? data.azurerm_key_vault.kv_user[0].id : azurerm_key_vault.kv_user[0].id
+  value                                = var.key_vault.exists ? data.azurerm_key_vault.kv_user[0].id : azurerm_key_vault.kv_user[0].id
 }
 
 
@@ -198,17 +208,17 @@ output "firewall_id" {
 
 output "webapp_url_base" {
   description                          = "Webapp URL Base"
-  value                                = var.use_webapp ? try(azurerm_windows_web_app.webapp[0].name, "") : ""
+  value                                = var.app_service.use ? try(azurerm_windows_web_app.webapp[0].name, "") : ""
 }
 
 output "webapp_identity" {
   description                          = "Webapp Identity"
-  value                                = var.use_webapp ? try(azurerm_windows_web_app.webapp[0].identity[0].principal_id, "") :  ""
+  value                                = var.app_service.use ? try(azurerm_windows_web_app.webapp[0].identity[0].principal_id, "") :  ""
 }
 
 output "webapp_id" {
   description                          = "Webapp ID"
-  value                                = var.use_webapp ? try(azurerm_windows_web_app.webapp[0].id, "") : ""
+  value                                = var.app_service.use ? try(azurerm_windows_web_app.webapp[0].id, "") : ""
 }
 
 ###############################################################################
@@ -232,12 +242,185 @@ output "extension_ids" {
 output "subnet_bastion_address_prefixes" {
   description                          = "Bastion Subnet Address Prefixes"
   value                                = var.bastion_deployment ? (
-                                          length(var.infrastructure.vnets.management.subnet_bastion.arm_id) == 0 ? (
-                                            azurerm_subnet.bastion[0].address_prefixes) : (
-                                            data.azurerm_subnet.bastion[0].address_prefixes
+                                          var.infrastructure.virtual_network.management.subnet_bastion.exists ? (
+                                            data.azurerm_subnet.bastion[0].address_prefixes) : (
+                                            azurerm_subnet.bastion[0].address_prefixes
                                           )) : (
                                           [""]
                                         )
 }
 
+output "diagnostics_account_id" {
+  description                          = "Diagnostics Storage Account ID"
+  value                                = length(var.deployer.deployer_diagnostics_account_arm_id) == 0 ? (min(1,var.deployer_vm_count) > 0 ? azurerm_storage_account.deployer[0].id : "") : var.deployer.deployer_diagnostics_account_arm_id
+}
 
+###############################################################################
+#                                                                             #
+#                                App Config                                   #
+#                                                                             #
+###############################################################################
+
+
+output "application_configuration_name"                {
+  description                          = "Application Configuration Name"
+  value                                = var.app_config_service.deploy ? (
+                                            length(var.app_config_service.id) == 0 ? azurerm_app_configuration.app_config[0].name : data.azurerm_app_configuration.app_config[0].name) : (
+                                            "")
+}
+
+
+output "application_configuration_id"                  {
+  description                          = "Application Configuration Resource Id"
+  value                                = var.app_config_service.deploy ? (
+                                            length(var.app_config_service.id) == 0 ? azurerm_app_configuration.app_config[0].id : data.azurerm_app_configuration.app_config[0].id) : (
+                                            "")
+}
+
+
+resource "local_file" "deployer_md" {
+  content = templatefile(format("%s/templates/deployer.tmpl", path.module), {
+              resource_group_name         = var.infrastructure.resource_group.exists ? (
+                                           data.azurerm_resource_group.deployer[0].name) : (
+                                           azurerm_resource_group.deployer[0].name
+                                         )
+              subscription_id             = var.infrastructure.resource_group.exists ? (
+                                           split("/", data.azurerm_resource_group.deployer[0].id))[2] : (
+                                           split("/", azurerm_resource_group.deployer[0].id)[2]
+                                         )
+              url                         = format("https://portal.azure.com/#@%s/resource/subscriptions/%s/resourceGroups/%s/overview",
+                                                    data.azurerm_client_config.current.tenant_id,
+                                                    var.infrastructure.resource_group.exists ? (
+                                                      split("/", data.azurerm_resource_group.deployer[0].id))[2] : (
+                                                      split("/", azurerm_resource_group.deployer[0].id)[2]),
+                                                    var.infrastructure.resource_group.exists ? (
+                                                      data.azurerm_resource_group.deployer[0].name) : (
+                                                      azurerm_resource_group.deployer[0].name)
+                                                  )
+              key_vault_url               = format("https://portal.azure.com/#@%s/resource/subscriptions/%s/resourceGroups/%s/providers/Microsoft.KeyVault/vaults/%s/overview",
+                                                    data.azurerm_client_config.current.tenant_id,
+                                                    var.infrastructure.resource_group.exists ? (
+                                                      split("/", data.azurerm_resource_group.deployer[0].id))[2] : (
+                                                      split("/", azurerm_resource_group.deployer[0].id)[2]),
+                                                    var.infrastructure.resource_group.exists ? (
+                                                      data.azurerm_resource_group.deployer[0].name) : (
+                                                      azurerm_resource_group.deployer[0].name),
+                                                    var.key_vault.exists ?
+                                                      data.azurerm_key_vault.kv_user[0].name :
+                                                      azurerm_key_vault.kv_user[0].name
+                                                    )
+              key_vault_name              = var.key_vault.exists ? (
+                                                    data.azurerm_key_vault.kv_user[0].name) : (
+                                                    azurerm_key_vault.kv_user[0].name
+                                                  )
+
+              app_service_url             = var.app_service.use ? format("https://%s.azurewebsites.net", try(azurerm_windows_web_app.webapp[0].name, "")) : ""
+              app_service_name            = var.app_service.use ? try(azurerm_windows_web_app.webapp[0].name, "") : ""
+
+              app_configuration_url       = format("https://portal.azure.com/#@%s/resource/subscriptions/%s/resourceGroups/%s/providers/Microsoft.AppConfiguration/configurationStores/%s/overview",
+                                                    data.azurerm_client_config.current.tenant_id,
+                                                    var.infrastructure.resource_group.exists ? (
+                                                      split("/", data.azurerm_resource_group.deployer[0].id))[2] : (
+                                                      split("/", azurerm_resource_group.deployer[0].id)[2]),
+                                                    var.infrastructure.resource_group.exists ? (
+                                                      data.azurerm_resource_group.deployer[0].name) : (
+                                                      azurerm_resource_group.deployer[0].name),
+                                                    var.app_config_service.deploy ? (
+                                                      length(var.app_config_service.id) == 0 ? azurerm_app_configuration.app_config[0].name : data.azurerm_app_configuration.app_config[0].name) : ("")
+                                                    )
+              app_configuration_name      = var.app_config_service.deploy ? (
+                                              length(var.app_config_service.id) == 0 ? azurerm_app_configuration.app_config[0].name : data.azurerm_app_configuration.app_config[0].name) : ("")
+
+              }
+            )
+  filename             = format("%s/readme.md", path.cwd)
+  file_permission      = "0660"
+  directory_permission = "0770"
+}
+
+
+resource "local_file" "deployer_exports" {
+  content = templatefile(format("%s/templates/deployer_exports.tmpl", path.module), {
+              subscription_id             = var.infrastructure.resource_group.exists ? (
+                                           split("/", data.azurerm_resource_group.deployer[0].id)[2]) : (
+                                           split("/", azurerm_resource_group.deployer[0].id)[2]
+                                         )
+              app_configuration_name      = var.app_config_service.deploy ? (
+                                            length(var.app_config_service.id) == 0 ? azurerm_app_configuration.app_config[0].name : data.azurerm_app_configuration.app_config[0].name) : (
+                                            "")
+              terraform_storage_account_name = var.infrastructure.tfstate_storage_account_name
+              control_plane_name          = var.naming.prefix.DEPLOYER
+              keyvault_name               = var.key_vault.exists ? (
+                                            data.azurerm_key_vault.kv_user[0].name) : (
+                                            azurerm_key_vault.kv_user[0].name)
+              app_service_name            = var.app_service.use ? try(azurerm_windows_web_app.webapp[0].name, "") : ""
+
+              }
+            )
+  filename             = format("%s/exports.sh", path.cwd)
+  file_permission      = "0660"
+  directory_permission = "0770"
+}
+
+output "infrastructure_resource_cardinality" {
+  description = "Cardinality (creation count) of core infrastructure resources for terraform test diagnostics. 1 = created (greenfield), 0 = looked up (brownfield)."
+  value = {
+    vnet            = length(azurerm_virtual_network.vnet_mgmt)
+    mgmt_subnet     = length(azurerm_subnet.subnet_mgmt)
+    mgmt_nsg        = length(azurerm_network_security_group.nsg_mgmt)
+    firewall_subnet = length(azurerm_subnet.firewall)
+    bastion_subnet  = length(azurerm_subnet.bastion)
+    webapp_subnet   = length(azurerm_subnet.webapp)
+    agent_subnet    = length(azurerm_subnet.subnet_agent)
+  }
+}
+
+output "resource_group_info" {
+  description = "Deployer resource group creation status and tags for terraform test diagnostics"
+  value = {
+    created_count = length(azurerm_resource_group.deployer)
+    tags          = var.infrastructure.resource_group.exists ? data.azurerm_resource_group.deployer[0].tags : azurerm_resource_group.deployer[0].tags
+  }
+}
+
+output "key_vault_info" {
+  description = "Deployer key vault creation status, tags, and security posture for terraform test diagnostics"
+  value = {
+    created_count                 = length(azurerm_key_vault.kv_user)
+    tags                          = var.key_vault.exists ? data.azurerm_key_vault.kv_user[0].tags : azurerm_key_vault.kv_user[0].tags
+    public_network_access_enabled = var.key_vault.exists ? try(data.azurerm_key_vault.kv_user[0].public_network_access_enabled, null) : try(azurerm_key_vault.kv_user[0].public_network_access_enabled, null)
+  }
+}
+
+output "diagnostics_storage_info" {
+  description = "Diagnostics storage account tags and network security posture for terraform test diagnostics"
+  value = {
+    tags           = length(var.deployer.deployer_diagnostics_account_arm_id) == 0 ? try(azurerm_storage_account.deployer[0].tags, null) : try(data.azurerm_storage_account.deployer[0].tags, null)
+    default_action = length(var.deployer.deployer_diagnostics_account_arm_id) == 0 ? try(azurerm_storage_account.deployer[0].network_rules[0].default_action, "") : ""
+  }
+}
+
+output "app_configuration_created_count" {
+  description = "Diagnostic count of created application configuration stores (discrete optional feature; retained standalone since merging would obscure its independent on/off toggle)"
+  value       = length(azurerm_app_configuration.app_config)
+}
+
+output "deployer_public_ip_created_count" {
+  description = "Diagnostic count of created deployer public IP resources"
+  value       = length(azurerm_public_ip.deployer)
+}
+
+output "deployer_uai_created_count" {
+  description = "Diagnostic count of created deployer user-assigned identity resources"
+  value       = length(azurerm_user_assigned_identity.deployer)
+}
+
+output "firewall_created_count" {
+  description = "Diagnostic count of created Azure Firewall resources"
+  value       = length(azurerm_firewall.firewall)
+}
+
+output "network_security_perimeter_created_count" {
+  description = "Diagnostic count of created network security perimeters (discrete optional feature; retained standalone for the same reason as app_configuration_created_count)"
+  value       = length(azurerm_network_security_perimeter.perimeter)
+}

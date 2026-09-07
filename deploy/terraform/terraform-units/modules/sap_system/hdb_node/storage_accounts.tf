@@ -3,14 +3,13 @@
 
 
 resource "azurerm_storage_account" "hanashared" {
+  #checkov:skip=CKV_AZURE_35: public access needed for hanashared export
+  #checkov:skip=CKV_AZURE_59: public access needed for hanashared export
+  #checkov:skip=CKV2_AZURE_38: soft-delete not required by default
+  #checkov:skip=CKV2_AZURE_1: no CMK infra provisioned by default
+  #checkov:skip=CKV_AZURE_206: explicit ZRS already set
   provider                             = azurerm.main
-  count                                = var.NFS_provider == "AFS" && var.database.scale_out ? (
-                                           try(length(var.hanashared_id) > 0, false) ? (
-                                             0) : (
-                                             var.use_single_hana_shared ? 1 : length(var.database.zones)
-                                           )) : (
-                                           0
-                                         )
+  count                                = local.hana_shared_count
   name                                 = substr(replace(
                                            lower(
                                              format("%s%s%s%01d",
@@ -33,12 +32,13 @@ resource "azurerm_storage_account" "hanashared" {
   account_tier                         = "Premium"
   account_replication_type             = "ZRS"
   account_kind                         = "FileStorage"
-  https_traffic_only_enabled            = false
+  https_traffic_only_enabled           = var.AFS_enable_encryption_in_transit
   min_tls_version                      = "TLS1_2"
   allow_nested_items_to_be_public      = false
   cross_tenant_replication_enabled     = false
 
   shared_access_key_enabled            = var.infrastructure.shared_access_key_enabled_nfs
+  default_to_oauth_authentication      = true
   tags                                 = var.tags
 
   network_rules {
@@ -64,10 +64,10 @@ resource "azurerm_storage_account" "hanashared" {
 
 resource "azurerm_storage_share" "hanashared" {
   provider                             = azurerm.main
-   count                                = var.NFS_provider == "AFS" && var.database.scale_out ? (
+   count                               = var.NFS_provider == "AFS" && var.database.scale_out ? (
                                            length(try(var.hanashared_id, "")) > 0 ? (
                                              0) : (
-                                             length(var.database.zones)
+                                             var.use_single_hana_shared ? 1 : max(2,length(var.database.zones))
                                            )) : (
                                            0
                                          )
@@ -84,7 +84,7 @@ resource "azurerm_storage_share" "hanashared" {
   storage_account_id                   = var.NFS_provider == "AFS" ? (
                                            length(try(var.hanashared_id, "")) > 0 ? (
                                              var.hanashared_id[var.use_single_hana_shared ? 0 : count.index]) : (
-                                             azurerm_storage_account.hanashared[var.use_single_hana_shared ? 0 : count.index].id
+                                             azurerm_storage_account.hanashared[var.use_single_hana_shared ? 0 : 0].id
                                            )
                                            ) : (
                                            ""

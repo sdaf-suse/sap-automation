@@ -76,40 +76,40 @@ variable "infrastructure"                        {
                                        validation {
                                          condition = (
                                            contains(keys(var.infrastructure.virtual_networks.sap), "subnet_admin") ? (
-                                             var.infrastructure.virtual_networks.sap.subnet_admin != null ? (
-                                               length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_admin.arm_id, ""))) != 0 || length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_admin.prefix, ""))) != 0) : (
+                                             !var.infrastructure.virtual_networks.sap.subnet_admin.exists_in_workload && var.infrastructure.virtual_networks.sap.subnet_admin.defined ? (
+                                               length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_admin.id, ""))) != 0 || length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_admin.prefix, ""))) != 0) : (
                                                true
                                              )) : (
                                              true
                                            )
                                          )
-                                         error_message = "Either the arm_id or prefix of the Admin subnet must be specified in the infrastructure.virtual_networks.sap.subnet_admin block."
+                                         error_message = "Either the id or prefix of the Admin subnet must be specified in the infrastructure.virtual_networks.sap.subnet_admin block."
                                        }
 
                                        validation {
                                                     condition = (
                                                       contains(keys(var.infrastructure.virtual_networks.sap), "subnet_app") ? (
-                                                        var.infrastructure.virtual_networks.sap.subnet_app != null ? (
-                                                          length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_app.arm_id, ""))) != 0 || length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_app.prefix, ""))) != 0) : (
+                                                        !var.infrastructure.virtual_networks.sap.subnet_app.exists_in_workload && var.infrastructure.virtual_networks.sap.subnet_app.defined ? (
+                                                          length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_app.id, ""))) != 0 || length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_app.prefix, ""))) != 0) : (
                                                           true
                                                         )) : (
                                                         true
                                                       )
                                                     )
-                                                    error_message = "Either the arm_id or prefix of the Application subnet must be specified in the infrastructure.virtual_networks.sap.subnet_app block."
+                                                    error_message = "Either the id or prefix of the Application subnet must be specified in the infrastructure.virtual_networks.sap.subnet_app block."
                                                   }
 
                                        validation {
                                                     condition = (
                                                       contains(keys(var.infrastructure.virtual_networks.sap), "subnet_db") ? (
-                                                        var.infrastructure.virtual_networks.sap.subnet_db != null ? (
-                                                          length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_db.arm_id, ""))) != 0 || length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_db.prefix, ""))) != 0) : (
+                                                        !var.infrastructure.virtual_networks.sap.subnet_db.exists_in_workload && var.infrastructure.virtual_networks.sap.subnet_db.defined ? (
+                                                          length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_db.id, ""))) != 0 || length(trimspace(try(var.infrastructure.virtual_networks.sap.subnet_db.prefix, ""))) != 0) : (
                                                           true
                                                         )) : (
                                                         true
                                                       )
                                                     )
-                                                    error_message = "Either the arm_id or prefix of the Database subnet must be specified in the infrastructure.virtual_networks.sap.subnet_db block."
+                                                    error_message = "Either the id or prefix of the Database subnet must be specified in the infrastructure.virtual_networks.sap.subnet_db block."
                                                   }
                                                  }
 
@@ -131,15 +131,15 @@ variable "key_vault"                             {
                                                   }
                                        validation {
                                                     condition = (
-                                                      contains(keys(var.key_vault), "kv_user_id") ? (
-                                                        length(var.key_vault.kv_user_id) > 0 ? (
-                                                          length(split("/", var.key_vault.kv_user_id)) == 9) : (
+                                                      contains(keys(var.key_vault), "keyvault_id_for_system_credentials") ? (
+                                                        length(var.key_vault.keyvault_id_for_system_credentials) > 0 ? (
+                                                          length(split("/", var.key_vault.keyvault_id_for_system_credentials)) == 9) : (
                                                           true
                                                         )) : (
                                                         true
                                                       )
                                                     )
-                                                    error_message = "If specified, the kv_user_id needs to be a correctly formed Azure resource ID."
+                                                    error_message = "If specified, the keyvault_id_for_system_credentials needs to be a correctly formed Azure resource ID."
                                                   }
                                                  }
 
@@ -164,15 +164,6 @@ variable "is_single_node_hana"                   {
                                                  }
 
 variable "deployer_tfstate"                      { description = "Deployer remote tfstate file" }
-
-variable "service_principal"                     { description = "Current service principal used to authenticate to Azure" }
-
-/* Comment out code with users.object_id for the time being
-variable "deployer_user" {
-  description = "Details of the users"
-  default     = []
-}
-*/
 
 variable "naming"                                { description = "Defines the names for the resources" }
 
@@ -225,6 +216,18 @@ variable "enable_firewall_for_keyvaults_and_storage" {
                                                        type        = bool
                                                      }
 
+variable "use_AFS_for_shared_storage"            {
+                                                    description = "If true, use Azure Files Shares (AFS) for SAP shared storage (for example sapmnt), in addition to or instead of ANF as configured."
+                                                    type        = bool
+                                                    default     = false
+                                                 }
+
+variable "AFS_enable_encryption_in_transit"      {
+                                                    description = "Enable encryption in transit for Azure Files"
+                                                    type        = bool
+                                                    default     = false
+                                                 }
+
 #########################################################################################
 #                                                                                       #
 #  DNS settings                                                                         #
@@ -232,16 +235,14 @@ variable "enable_firewall_for_keyvaults_and_storage" {
 #########################################################################################
 
 
-variable "dns_settings"                                 {
-                                                          description = "DNS Settings"
-                                                        }
+variable "dns_settings"                          {
+                                                    description = "DNS Settings"
+                                                 }
 variable "sapmnt_private_endpoint_id"            {
                                                     description = "Azure Resource Identifier for an private endpoint connection"
                                                     type        = string
                                                     default     = ""
                                                  }
-
-variable "database_dual_nics"                    { description = "value to indicate if dual nics are used for HANA" }
 
 variable "hana_ANF_volumes"                      { description = "Defines HANA ANF  volumes" }
 

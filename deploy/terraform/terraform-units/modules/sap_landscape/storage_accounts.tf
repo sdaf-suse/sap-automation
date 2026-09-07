@@ -8,14 +8,17 @@
 ################################################################################
 
 resource "azurerm_storage_account" "storage_bootdiag" {
+  #checkov:skip=CKV2_AZURE_38: soft-delete not required by default
+  #checkov:skip=CKV2_AZURE_1: no CMK infra provisioned by default
   provider                             = azurerm.main
-  count                                = length(var.diagnostics_storage_account.arm_id) > 0 ? 0 : 1
+  count                                = length(var.diagnostics_storage_account.id) > 0 ? 0 : 1
   depends_on                           = [
-                                           azurerm_subnet.app,
-                                           azurerm_subnet.db,
-                                           azurerm_subnet.web,
+                                           azurerm_virtual_network_peering.peering_management_sap,
+                                           azurerm_virtual_network_peering.peering_sap_management,
+                                           azurerm_virtual_network_peering.peering_additional_network_sap,
+                                           azurerm_virtual_network_peering.peering_sap_additional_network,
                                          ]
-  name                                 = local.storageaccount_name
+  name                                 = var.naming.storageaccount_names.WORKLOAD_ZONE.landscape_storageaccount_name
 
   resource_group_name                  = local.resource_group_exists ? (
                                            data.azurerm_resource_group.resource_group[0].name) : (
@@ -35,24 +38,25 @@ resource "azurerm_storage_account" "storage_bootdiag" {
   cross_tenant_replication_enabled     = false
   tags                                 = var.tags
   shared_access_key_enabled            = var.infrastructure.shared_access_key_enabled
+  default_to_oauth_authentication      = true
   public_network_access_enabled        = var.public_network_access_enabled
   network_rules {
                 default_action              = var.enable_firewall_for_keyvaults_and_storage ? "Deny" : "Allow"
                 virtual_network_subnet_ids  = var.public_network_access_enabled ? compact([
-                                                local.database_subnet_defined ? (
-                                                  local.database_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_db.arm_id : azurerm_subnet.db[0].id) : (
+                                                (var.infrastructure.virtual_networks.sap.subnet_db.defined||var.infrastructure.virtual_networks.sap.subnet_db.exists) ? (
+                                                  var.infrastructure.virtual_networks.sap.subnet_db.exists ? var.infrastructure.virtual_networks.sap.subnet_db.id : azurerm_subnet.db[0].id) : (
                                                   null
-                                                  ), local.application_subnet_defined ? (
-                                                  local.application_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_app.arm_id : azurerm_subnet.app[0].id) : (
+                                                  ), (var.infrastructure.virtual_networks.sap.subnet_app.defined||var.infrastructure.virtual_networks.sap.subnet_app.exists) ? (
+                                                  var.infrastructure.virtual_networks.sap.subnet_app.exists ? var.infrastructure.virtual_networks.sap.subnet_app.id : azurerm_subnet.app[0].id) : (
                                                   null
-                                                ), local.web_subnet_defined ? (
-                                                  local.web_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_web.arm_id : azurerm_subnet.web[0].id) : (
+                                                ), (var.infrastructure.virtual_networks.sap.subnet_web.defined||var.infrastructure.virtual_networks.sap.subnet_web.exists) ? (
+                                                  var.infrastructure.virtual_networks.sap.subnet_web.exists ? var.infrastructure.virtual_networks.sap.subnet_web.id : azurerm_subnet.web[0].id) : (
                                                   null
-                                                ), local.enable_sub_iscsi ? (
-                                                  local.sub_iscsi_exists ? var.infrastructure.virtual_networks.sap.subnet_iscsi.arm_id : azurerm_subnet.iscsi[0].id) : (
+                                                ), (var.infrastructure.virtual_networks.sap.subnet_iscsi.defined||var.infrastructure.virtual_networks.sap.subnet_iscsi.exists) ? (
+                                                  var.infrastructure.virtual_networks.sap.subnet_iscsi.exists ? var.infrastructure.virtual_networks.sap.subnet_iscsi.id : azurerm_subnet.iscsi[0].id) : (
                                                   null
                                                 ), length(local.deployer_subnet_management_id) > 0 ? local.deployer_subnet_management_id : null,
-                                                length(var.additional_network_id) > 0 ? var.additional_network_id : null
+                                                length(var.infrastructure.additional_subnet_id) > 0 ? var.infrastructure.additional_subnet_id : null
                                                 ]
                                               ) : null
                 ip_rules                   = var.public_network_access_enabled ? compact([
@@ -66,14 +70,15 @@ resource "azurerm_storage_account" "storage_bootdiag" {
 
 data "azurerm_storage_account" "storage_bootdiag" {
   provider                             = azurerm.main
-  count                                = length(var.diagnostics_storage_account.arm_id) > 0 ? 1 : 0
-  name                                 = split("/", var.diagnostics_storage_account.arm_id)[8]
-  resource_group_name                  = split("/", var.diagnostics_storage_account.arm_id)[4]
+  count                                = length(var.diagnostics_storage_account.id) > 0 ? 1 : 0
+  name                                 = split("/", var.diagnostics_storage_account.id)[8]
+  resource_group_name                  = split("/", var.diagnostics_storage_account.id)[4]
 }
 
 resource "azurerm_private_endpoint" "storage_bootdiag" {
   provider                             = azurerm.main
-  count                                = var.use_private_endpoint && local.admin_subnet_defined && (length(var.diagnostics_storage_account.arm_id) == 0) ? 1 : 0
+  # We cannot use .defined here as it would break if the customer provides the Azure Resource Id for the app subnet
+  count                                = var.use_private_endpoint && (var.infrastructure.virtual_networks.sap.subnet_app.defined || var.infrastructure.virtual_networks.sap.subnet_app.exists) && (length(var.diagnostics_storage_account.id) == 0) ? 1 : 0
   depends_on                           = [
                                            azurerm_subnet.app
                                          ]
@@ -97,8 +102,8 @@ resource "azurerm_private_endpoint" "storage_bootdiag" {
                                           data.azurerm_resource_group.resource_group[0].location) : (
                                           azurerm_resource_group.resource_group[0].location
                                         )
-  subnet_id                            = local.application_subnet_existing ? (
-                                           var.infrastructure.virtual_networks.sap.subnet_app.arm_id) : (
+  subnet_id                            = var.infrastructure.virtual_networks.sap.subnet_app.exists ? (
+                                           var.infrastructure.virtual_networks.sap.subnet_app.id) : (
                                            azurerm_subnet.app[0].id
                                          )
   tags                                 = var.tags
@@ -110,8 +115,8 @@ resource "azurerm_private_endpoint" "storage_bootdiag" {
                                  local.resource_suffixes.storage_private_svc_diag
                                )
                                is_manual_connection = false
-                               private_connection_resource_id = length(var.diagnostics_storage_account.arm_id) > 0 ? (
-                                 var.diagnostics_storage_account.arm_id) : (
+                               private_connection_resource_id = length(var.diagnostics_storage_account.id) > 0 ? (
+                                 var.diagnostics_storage_account.id) : (
                                  azurerm_storage_account.storage_bootdiag[0].id
                                )
                                subresource_names = [
@@ -143,13 +148,17 @@ resource "azurerm_private_endpoint" "storage_bootdiag" {
 ################################################################################
 
 resource "azurerm_storage_account" "witness_storage" {
+  #checkov:skip=CKV2_AZURE_38: soft-delete not required by default
+  #checkov:skip=CKV2_AZURE_1: no CMK infra provisioned by default
   provider                             = azurerm.main
-  count                                = length(var.witness_storage_account.arm_id) > 0 ? 0 : 1
+  count                                = length(var.witness_storage_account.id) > 0 ? 0 : 1
   depends_on                           = [
-                                           azurerm_subnet.app,
-                                           azurerm_subnet.db
+                                           azurerm_virtual_network_peering.peering_management_sap,
+                                           azurerm_virtual_network_peering.peering_sap_management,
+                                           azurerm_virtual_network_peering.peering_additional_network_sap,
+                                           azurerm_virtual_network_peering.peering_sap_additional_network,
                                          ]
-  name                                 = local.witness_storageaccount_name
+  name                                 = var.naming.storageaccount_names.WORKLOAD_ZONE.witness_storageaccount_name
   resource_group_name                  = local.resource_group_exists ? (
                                            data.azurerm_resource_group.resource_group[0].name) : (
                                            azurerm_resource_group.resource_group[0].name
@@ -161,26 +170,27 @@ resource "azurerm_storage_account" "witness_storage" {
 
   account_replication_type             = "LRS"
   account_tier                         = "Standard"
-  https_traffic_only_enabled            = true
+  https_traffic_only_enabled           = true
   min_tls_version                      = "TLS1_2"
   allow_nested_items_to_be_public      = false
   cross_tenant_replication_enabled     = false
   public_network_access_enabled        = var.public_network_access_enabled
   shared_access_key_enabled            = var.infrastructure.shared_access_key_enabled
+  default_to_oauth_authentication      = true
 
   tags                                 = var.tags
   network_rules {
                   default_action              = var.enable_firewall_for_keyvaults_and_storage ? "Deny" : "Allow"
                   virtual_network_subnet_ids  = var.public_network_access_enabled ? compact([
-                                                  local.database_subnet_defined ? (
-                                                    local.database_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_db.arm_id : azurerm_subnet.db[0].id) : (
+                                                  var.infrastructure.virtual_networks.sap.subnet_db.defined ? (
+                                                    var.infrastructure.virtual_networks.sap.subnet_db.defined ? var.infrastructure.virtual_networks.sap.subnet_db.id : azurerm_subnet.db[0].id) : (
                                                     null
-                                                    ), local.application_subnet_defined ? (
-                                                    local.application_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_app.arm_id : azurerm_subnet.app[0].id) : (
+                                                    ), var.infrastructure.virtual_networks.sap.subnet_app.defined ? (
+                                                    var.infrastructure.virtual_networks.sap.subnet_app.exists ? var.infrastructure.virtual_networks.sap.subnet_app.id : azurerm_subnet.app[0].id) : (
                                                     null
                                                   ),
                                                   length(local.deployer_subnet_management_id) > 0 ? local.deployer_subnet_management_id : null,
-                                                  length(var.additional_network_id) > 0 ? var.additional_network_id : null
+                                                  length(var.infrastructure.additional_subnet_id) > 0 ? var.infrastructure.additional_subnet_id : null
                                                   ]
                                                 ) : null
                   ip_rules                   = var.public_network_access_enabled ? compact([
@@ -195,14 +205,14 @@ resource "azurerm_storage_account" "witness_storage" {
 
 data "azurerm_storage_account" "witness_storage" {
   provider                             = azurerm.main
-  count                                = length(var.witness_storage_account.arm_id) > 0 ? 1 : 0
-  name                                 = split("/", var.witness_storage_account.arm_id)[8]
-  resource_group_name                  = split("/", var.witness_storage_account.arm_id)[4]
+  count                                = length(var.witness_storage_account.id) > 0 ? 1 : 0
+  name                                 = split("/", var.witness_storage_account.id)[8]
+  resource_group_name                  = split("/", var.witness_storage_account.id)[4]
 }
 
 resource "azurerm_private_endpoint" "witness_storage" {
   provider                             = azurerm.main
-  count                                = var.use_private_endpoint && local.admin_subnet_defined && (length(var.witness_storage_account.arm_id) == 0) ? 1 : 0
+  count                                = var.use_private_endpoint && var.infrastructure.virtual_networks.sap.subnet_db.defined && (length(var.witness_storage_account.id) == 0) ? 1 : 0
   depends_on                           = [
                                            azurerm_subnet.db,
                                            azurerm_private_dns_zone_virtual_network_link.storage[0]
@@ -228,12 +238,9 @@ resource "azurerm_private_endpoint" "witness_storage" {
                                           data.azurerm_resource_group.resource_group[0].location) : (
                                           azurerm_resource_group.resource_group[0].location
                                         )
-  subnet_id                            = local.database_subnet_defined ? (
-                                           local.database_subnet_existing ? (
-                                             var.infrastructure.virtual_networks.sap.subnet_db.arm_id) : (
-                                             azurerm_subnet.db[0].id)) : (
-                                           ""
-                                         )
+  subnet_id                            = var.infrastructure.virtual_networks.sap.subnet_db.exists ? (
+                                             var.infrastructure.virtual_networks.sap.subnet_db.id) : (
+                                             azurerm_subnet.db[0].id)
 
   tags                                 = var.tags
   private_service_connection {
@@ -243,8 +250,8 @@ resource "azurerm_private_endpoint" "witness_storage" {
                                  local.resource_suffixes.storage_private_svc_witness
                                )
                                is_manual_connection = false
-                               private_connection_resource_id = length(var.witness_storage_account.arm_id) > 0 ? (
-                                 var.witness_storage_account.arm_id) : (
+                               private_connection_resource_id = length(var.witness_storage_account.id) > 0 ? (
+                                 var.witness_storage_account.id) : (
                                  azurerm_storage_account.witness_storage[0].id
                                )
                                subresource_names = [
@@ -278,10 +285,17 @@ resource "azurerm_private_endpoint" "witness_storage" {
 ################################################################################
 
 resource "azurerm_storage_account" "transport" {
+  #checkov:skip=CKV_AZURE_35: public access needed for transport share
+  #checkov:skip=CKV2_AZURE_38: soft-delete not required by default
+  #checkov:skip=CKV2_AZURE_1: no CMK infra provisioned by default
+  #checkov:skip=CKV_AZURE_206: explicit ZRS already set
   provider                             = azurerm.main
   count                                = var.create_transport_storage && local.use_AFS_for_shared && length(var.transport_storage_account_id) == 0 ? 1 : 0
   depends_on                           = [
-                                           azurerm_subnet.app
+                                           azurerm_virtual_network_peering.peering_management_sap,
+                                           azurerm_virtual_network_peering.peering_sap_management,
+                                           azurerm_virtual_network_peering.peering_additional_network_sap,
+                                           azurerm_virtual_network_peering.peering_sap_additional_network,
                                          ]
   name                                 = replace(
                                           lower(
@@ -301,11 +315,12 @@ resource "azurerm_storage_account" "transport" {
   account_tier                         = "Premium"
   account_replication_type             = "ZRS"
   account_kind                         = "FileStorage"
-  https_traffic_only_enabled            = false
+  https_traffic_only_enabled           = var.AFS_enable_encryption_in_transit
   min_tls_version                      = "TLS1_2"
   allow_nested_items_to_be_public      = false
 
   shared_access_key_enabled            = var.infrastructure.shared_access_key_enabled_nfs
+  default_to_oauth_authentication      = true
 
   cross_tenant_replication_enabled     = false
   public_network_access_enabled        = var.public_network_access_enabled
@@ -313,15 +328,16 @@ resource "azurerm_storage_account" "transport" {
   network_rules {
                   default_action              = var.enable_firewall_for_keyvaults_and_storage ? "Deny" : "Allow"
                   virtual_network_subnet_ids  = var.public_network_access_enabled ? compact([
-                                                  local.database_subnet_defined ? (
-                                                    local.database_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_db.arm_id : azurerm_subnet.db[0].id) : (
+                                                  (var.infrastructure.virtual_networks.sap.subnet_db.defined||var.infrastructure.virtual_networks.sap.subnet_db.exists) ? (
+                                                    var.infrastructure.virtual_networks.sap.subnet_db.exists ? var.infrastructure.virtual_networks.sap.subnet_db.id : azurerm_subnet.db[0].id) : (
                                                     null
-                                                    ), local.application_subnet_defined ? (
-                                                    local.application_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_app.arm_id : azurerm_subnet.app[0].id) : (
+                                                    ),
+                                                  (var.infrastructure.virtual_networks.sap.subnet_app.defined||var.infrastructure.virtual_networks.sap.subnet_app.exists) ? (
+                                                    var.infrastructure.virtual_networks.sap.subnet_app.exists ? var.infrastructure.virtual_networks.sap.subnet_app.id : azurerm_subnet.app[0].id) : (
                                                     null
                                                   ),
                                                   length(local.deployer_subnet_management_id) > 0 ? local.deployer_subnet_management_id : null,
-                                                  length(var.additional_network_id) > 0 ? var.additional_network_id : null
+                                                  length(var.infrastructure.additional_subnet_id) > 0 ? var.infrastructure.additional_subnet_id : null
                                                   ]
                                                 ) : null
                   ip_rules                   = var.public_network_access_enabled ? compact([
@@ -383,7 +399,9 @@ resource "azurerm_private_endpoint" "transport" {
                                            azurerm_subnet.app,
                                            azurerm_private_dns_zone_virtual_network_link.vnet_sap_file
                                          ]
-  count                                = var.create_transport_storage && var.use_private_endpoint && local.use_AFS_for_shared ? (
+  count                                = var.create_transport_storage && var.use_private_endpoint && local.use_AFS_for_shared && (
+                                            var.infrastructure.virtual_networks.sap.subnet_app.defined || var.infrastructure.virtual_networks.sap.subnet_app.exists
+                                          ) ? (
                                            length(var.transport_storage_account_id) > 0 ? (
                                              0) : (
                                              1
@@ -396,6 +414,7 @@ resource "azurerm_private_endpoint" "transport" {
                                            local.prefix,
                                            local.resource_suffixes.storage_private_link_transport
                                          )
+  tags                                 = var.tags
   custom_network_interface_name        = format("%s%s%s%s",
                                            var.naming.resource_prefixes.storage_private_link_transport,
                                            local.prefix,
@@ -412,13 +431,9 @@ resource "azurerm_private_endpoint" "transport" {
                                           azurerm_resource_group.resource_group[0].location
                                         )
 
-  subnet_id                             = local.application_subnet_defined ? (
-                                          local.application_subnet_existing ? (
-                                            var.infrastructure.virtual_networks.sap.subnet_app.arm_id) : (
-                                            azurerm_subnet.app[0].id)) : (
-                                          ""
-                                        )
-
+  subnet_id                             = var.infrastructure.virtual_networks.sap.subnet_app.exists ? (
+                                            var.infrastructure.virtual_networks.sap.subnet_app.id) : (
+                                            azurerm_subnet.app[0].id)
   private_service_connection {
                                name = format("%s%s%s",
                                         var.naming.resource_prefixes.storage_private_svc_transport,
@@ -473,14 +488,15 @@ data "azurerm_private_endpoint_connection" "transport" {
 ################################################################################
 
 resource "azurerm_storage_account" "install" {
+  #checkov:skip=CKV2_AZURE_38: soft-delete not required by default
+  #checkov:skip=CKV2_AZURE_1: no CMK infra provisioned by default
   provider                             = azurerm.main
   count                                = local.use_AFS_for_shared && length(var.install_storage_account_id) == 0 ? 1 : 0
   depends_on                           = [
-                                           azurerm_subnet.app,
-                                           azurerm_subnet.db,
-                                           azurerm_subnet.web,
+                                           azurerm_virtual_network_peering.peering_management_sap,
+                                           azurerm_virtual_network_peering.peering_sap_management,
                                            azurerm_virtual_network_peering.peering_additional_network_sap,
-                                           azurerm_virtual_network_peering.peering_sap_additional_network
+                                           azurerm_virtual_network_peering.peering_sap_additional_network,
                                          ]
   name                                 = replace(
                                            lower(
@@ -502,16 +518,18 @@ resource "azurerm_storage_account" "install" {
   account_replication_type             = var.storage_account_replication_type
   account_tier                         = "Premium"
   allow_nested_items_to_be_public      = false
-  https_traffic_only_enabled            = false
+  https_traffic_only_enabled           = var.AFS_enable_encryption_in_transit
   min_tls_version                      = "TLS1_2"
   cross_tenant_replication_enabled     = false
   public_network_access_enabled        = var.public_network_access_enabled
   tags                                 = var.tags
   shared_access_key_enabled            = var.infrastructure.shared_access_key_enabled_nfs
+  default_to_oauth_authentication      = true
 
 }
 
 resource "azurerm_storage_account_network_rules" "install" {
+  #checkov:skip=CKV_AZURE_35: public access needed for install share
   provider                             = azurerm.main
   count                                = local.use_AFS_for_shared && var.enable_firewall_for_keyvaults_and_storage  && length(var.install_storage_account_id) == 0 ? 1 : 0
   depends_on                           = [
@@ -529,11 +547,11 @@ resource "azurerm_storage_account_network_rules" "install" {
                                                 ]) : null
 
   virtual_network_subnet_ids           = var.public_network_access_enabled ? compact([
-                                                  local.database_subnet_defined ? (
-                                                    local.database_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_db.arm_id : azurerm_subnet.db[0].id) : (
+                                                  (var.infrastructure.virtual_networks.sap.subnet_db.defined||var.infrastructure.virtual_networks.sap.subnet_db.exists) ? (
+                                                    var.infrastructure.virtual_networks.sap.subnet_db.exists ? var.infrastructure.virtual_networks.sap.subnet_db.id : azurerm_subnet.db[0].id) : (
                                                     null
-                                                    ), local.application_subnet_defined ? (
-                                                    local.application_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_app.arm_id : azurerm_subnet.app[0].id) : (
+                                                    ), (var.infrastructure.virtual_networks.sap.subnet_app.defined||var.infrastructure.virtual_networks.sap.subnet_app.exists) ? (
+                                                    var.infrastructure.virtual_networks.sap.subnet_app.exists ? var.infrastructure.virtual_networks.sap.subnet_app.id : azurerm_subnet.app[0].id) : (
                                                     null
                                                   ),
                                                   length(local.deployer_subnet_management_id) > 0 ? local.deployer_subnet_management_id : null
@@ -575,7 +593,7 @@ resource "azurerm_private_endpoint" "install" {
                                            azurerm_storage_share.install,
                                            azurerm_storage_share.install_smb
                                          ]
-  count                                = local.use_AFS_for_shared && var.use_private_endpoint ? (
+  count                                = local.use_AFS_for_shared && var.use_private_endpoint && (var.infrastructure.virtual_networks.sap.subnet_app.defined || var.infrastructure.virtual_networks.sap.subnet_app.exists) ? (
                                            length(var.install_private_endpoint_id) > 0 ? (
                                              0) : (
                                              1
@@ -587,6 +605,7 @@ resource "azurerm_private_endpoint" "install" {
                                            local.prefix,
                                            local.resource_suffixes.storage_private_link_install
                                          )
+  tags                                 = var.tags
   custom_network_interface_name        = format("%s%s%s%s",
                                           var.naming.resource_prefixes.storage_private_link_install,
                                           local.prefix,
@@ -602,10 +621,8 @@ resource "azurerm_private_endpoint" "install" {
                                           data.azurerm_resource_group.resource_group[0].location) : (
                                           azurerm_resource_group.resource_group[0].location
                                         )
-  subnet_id                            = local.application_subnet_defined ? (
-                                          local.application_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_app.arm_id : azurerm_subnet.app[0].id) : (
-                                          ""
-                                        )
+  subnet_id                            = var.infrastructure.virtual_networks.sap.subnet_app.exists ? var.infrastructure.virtual_networks.sap.subnet_app.id : azurerm_subnet.app[0].id
+
 
   private_service_connection {
                                name = format("%s%s%s",
@@ -691,26 +708,26 @@ resource "azurerm_storage_share" "install_smb" {
 
 #Private endpoint tend to take a while to be created, so we need to wait for it to be ready before we can use it
 resource "time_sleep" "wait_for_private_endpoints" {
-  create_duration                      = "120s"
+  create_duration                      = "60s"
 
-  depends_on                           = [
-                                           azurerm_private_endpoint.install,
-                                           azurerm_private_endpoint.transport,
-                                           azurerm_private_endpoint.kv_user
-                                         ]
+  triggers                           = {
+                                           install   = try(azurerm_private_endpoint.install[0].id, "")
+                                           transport = try(azurerm_private_endpoint.transport[0].id, "")
+                                           kv_user   = try(azurerm_private_endpoint.kv_user[0].id, "")
+                                       }
 }
 
 
 # data "azurerm_network_interface" "storage_bootdiag" {
 #   provider                             = azurerm.main
-#   count                                = var.use_private_endpoint && length(var.diagnostics_storage_account.arm_id) == 0 && length(try(azurerm_private_endpoint.storage_bootdiag[0].network_interface[0].id, "")) > 0 ? 1 : 0
+#   count                                = var.use_private_endpoint && length(var.diagnostics_storage_account.id) == 0 && length(try(azurerm_private_endpoint.storage_bootdiag[0].network_interface[0].id, "")) > 0 ? 1 : 0
 #   name                                 = azurerm_private_endpoint.storage_bootdiag[count.index].network_interface[0].name
 #   resource_group_name                  = split("/", azurerm_private_endpoint.storage_bootdiag[count.index].network_interface[0].id)[4]
 # }
 
 # data "azurerm_network_interface" "witness_storage" {
 #   provider                             = azurerm.main
-#   count                                = var.use_private_endpoint && length(var.witness_storage_account.arm_id) == 0 && length(try(azurerm_private_endpoint.witness_storage[0].network_interface[0].id, "")) > 0 ? 1 : 0
+#   count                                = var.use_private_endpoint && length(var.witness_storage_account.id) == 0 && length(try(azurerm_private_endpoint.witness_storage[0].network_interface[0].id, "")) > 0 ? 1 : 0
 #   name                                 = azurerm_private_endpoint.witness_storage[count.index].network_interface[0].name
 #   resource_group_name                  = split("/", azurerm_private_endpoint.witness_storage[count.index].network_interface[0].id)[4]
 # }

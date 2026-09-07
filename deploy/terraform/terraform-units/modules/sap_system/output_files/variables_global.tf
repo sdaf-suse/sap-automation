@@ -66,6 +66,8 @@ variable "database_server_ips"                  { description = "List of IP addr
 variable "database_server_secondary_ips"        { description = "List of secondary IP addresses for the database servers" }
 variable "database_shared_disks"                { description = "Database Azure Shared Disk" }
 variable "database_server_vm_names"             { description = "List of VM names for the database servers" }
+variable "deploy_monitoring_extension"          { description = "Deploy the Azure Extended monitoring for SAP solution" }
+
 variable "is_use_fence_kdump"                   { description = "Use fence kdump for optional stonith configuration on RHEL" }
 
 variable "db_sid"                               { description = "Database SID" }
@@ -75,10 +77,11 @@ variable "dns_zone_names"                       {
                                                   description = "Private DNS zone names"
                                                   type        = map(string)
                                                   default = {
-                                                              "file_dns_zone_name"   = "privatelink.file.core.windows.net"
-                                                              "blob_dns_zone_name"   = "privatelink.blob.core.windows.net"
-                                                              "table_dns_zone_name"  = "privatelink.table.core.windows.net"
-                                                              "vault_dns_zone_name"  = "privatelink.vaultcore.azure.net"
+                                                              "file_dns_zone_name"      = "privatelink.file.core.windows.net"
+                                                              "blob_dns_zone_name"      = "privatelink.blob.core.windows.net"
+                                                              "table_dns_zone_name"     = "privatelink.table.core.windows.net"
+                                                              "vault_dns_zone_name"     = "privatelink.vaultcore.azure.net"
+                                                              "appconfig_dns_zone_name" = "privatelink.azconfig.io"
                                                             }
                                                 }
 variable "dns"                                  {
@@ -126,6 +129,7 @@ variable "management_dns_subscription_id"       {
                                                   default     = null
                                                   type        = string
                                                 }
+
 variable "naming"                               { description = "Defines the names for the resources" }
 variable "NFS_provider"                         {
                                                   description = "Defines the NFS provider"
@@ -133,6 +137,7 @@ variable "NFS_provider"                         {
                                                 }
 variable "observer_ips"                         { description = "List of NICs for the Observer VMs" }
 variable "observer_vms"                         { description = "List of Observer VMs" }
+variable "observer_shared_disks"                { description = "Observer Azure Shared Disk" }
 variable "pas_instance_number"                  {
                                                   description = "Instance number for Primary Application Server"
                                                   default     = "00"
@@ -187,9 +192,14 @@ variable "scs_server_vm_resource_ids"           { description = "List of Virtual
 variable "scs_vm_names"                         { description = "List of VM names for the SCS Servers" }
 variable "shared_home"                          { description = "If defined provides shared-home support" }
 variable "sid_keyvault_user_id"                 { description = "Defines the names for the resources" }
-variable "subnet_cidr_storage"                { description = "address prefix for the storage subnet" }
+variable "subnet_cidr_storage"                  { description = "address prefix for the storage subnet" }
 variable "tfstate_resource_id"                  { description = "Resource ID for tf state file" }
 variable "upgrade_packages"                     { description = "Upgrade packages" }
+variable "use_AFS_encryption_in_transit"        { description = "Indicates if Encryption in transit is enabled for AFS shares" }
+variable "suse_subscription_id"                  {
+                                                  description = "SUSE registration code for BYOS/BYOL images"
+                                                  default     = ""
+                                                }
 variable "use_custom_dns_a_registration"        {
                                                   description = "Boolean value indicating if a custom dns a record should be created when using private endpoints"
                                                   default     = false
@@ -202,7 +212,8 @@ variable "use_simple_mount"                     {
                                                   description = "Use simple mount"
                                                   default     = true
                                                 }
-variable "usr_sap"                              { description = "If defined provides the mount point for /usr/sap on ANF" }
+variable "usr_sap"                              { description = "If defined provides the mount point for /usr/sap on ANF or on the Azure Files sapmnt storage" }
+variable "user_assigned_identity_id"            { description = "User assigned managed identity" }
 variable "web_instance_number"                  {
                                                   description = "The Instance number for Web Dispatcher"
                                                   default     = "00"
@@ -222,19 +233,5 @@ variable "webdispatcher_server_vm_names"        { description = "List of VM name
 variable "ams_resource_id"                      { description = "Resource ID for AMS" }
 variable "enable_os_monitoring"                 { description = "Enable OS monitoring" }
 variable "enable_ha_monitoring"                 { description = "Enable HA monitoring" }
-
-variable "enable_sap_cal"                       {
-                                                  description = "Enable SAP CAL"
-                                                  default     = false
-                                                  type        = bool
-                                                }
-variable "calapi_kv"                            {
-                                                  description = "Keyvault for CAL API"
-                                                  default     = ""
-                                                }
-variable "sap_cal_product_name"                 {
-                                                  description = "Product name of SAP CAL"
-                                                  default     = ""
-                                                }
 
 variable "site_information"                     { description = "Site information" }

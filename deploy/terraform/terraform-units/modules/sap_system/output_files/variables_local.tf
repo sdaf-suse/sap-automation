@@ -4,11 +4,14 @@
 
 locals {
 
+  parsed_tfstate_id                    = provider::azurerm::parse_resource_id(var.tfstate_resource_id)
   tfstate_resource_id                  = try(var.tfstate_resource_id, "")
-  tfstate_storage_account_name         = split("/", local.tfstate_resource_id)[8]
+  tfstate_storage_account_name         = local.parsed_tfstate_id["resource_name"]
   ansible_container_name               = try(var.naming.resource_suffixes.ansible, "ansible")
 
-  kv_name                              = split("/", var.sid_keyvault_user_id)[8]
+  key_vault_name                       = split("/", var.sid_keyvault_user_id)[8]
+  key_vault_resource_group             = split("/", var.sid_keyvault_user_id)[4]
+  key_vault_subscription_id            = split("/", var.sid_keyvault_user_id)[2]
 
   landscape_tfstate                    = var.landscape_tfstate
   ips_dbnodes_admin                    = var.database_admin_ips
@@ -30,7 +33,13 @@ locals {
 
   app_tier                             = (local.app_server_count + local.scs_server_count) > 0
 
-  db_supported_tiers                   = local.app_tier ? lower(var.platform) : format("%s, scs, pas", lower(var.platform))
+  single_server                        = length(var.webdispatcher_server_ips) + length(var.application_server_ips) + length(var.scs_server_ips) + length(var.database_server_ips) == 1 ? (
+                                                       true) : (
+                                                       false
+                                                     )
+
+
+  db_supported_tiers                   = local.app_tier ? lower(var.platform) : format("%s, scs, pas, web", lower(var.platform))
   scs_supported_tiers                  = local.app_server_count > 0 ? "scs" : "scs, pas"
 
   # If PAS and SCS is on same server
@@ -51,6 +60,7 @@ locals {
 
   scs_iqn                              = format("iqn.2006-04.ascs%s.local:ascs%s", lower(var.sap_sid), lower(var.sap_sid))
   db_iqn                               = format("iqn.2006-04.db%s.local:db%s", lower(var.sap_sid), lower(var.sap_sid))
+  observer_iqn                         = format("iqn.2006-04.db%s.local:db%s", lower(var.sap_sid), lower(var.sap_sid))
 
   iscsi_scs_servers                    = var.scs_cluster_type == "ISCSI" ? (
                                           distinct(flatten([for idx, vm in var.iSCSI_server_names : [
@@ -60,5 +70,13 @@ locals {
                                            distinct(flatten([for idx, vm in var.iSCSI_server_names : [
                                               format("{ host: '%s', ip : %s, iqn: %s, type: 'db' }", vm, var.iSCSI_server_ips[idx], local.db_iqn)]]))) : (
                                           [])
+
+  iscsi_observer_servers               = var.database_cluster_type == "ISCSI" ? (
+                                           distinct(flatten([for idx, vm in var.iSCSI_server_names : [
+                                              format("{ host: '%s', ip : %s, iqn: %s, type: 'observer' }", vm, var.iSCSI_server_ips[idx], local.observer_iqn)]]))) : (
+                                          [])
+
+  use_local_credentials                = length(var.authentication) > 0
+  use_eit_for_afs                      = var.use_AFS_encryption_in_transit
 
 }

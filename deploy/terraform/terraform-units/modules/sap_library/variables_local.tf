@@ -15,10 +15,9 @@ locals {
                                               )
 
   // Resource group
-  resource_group_exists                     = length(var.infrastructure.resource_group.arm_id) > 0
 
-  resource_group_name                       = local.resource_group_exists ? (
-                                                try(split("/", var.infrastructure.resource_group.arm_id)[4], "")) : (
+  resource_group_name                       = var.infrastructure.resource_group.exists ? (
+                                                try(split("/", var.infrastructure.resource_group.id)[4], "")) : (
                                                 length(var.infrastructure.resource_group.name) > 0 ? (
                                                   var.infrastructure.resource_group.name) : (
                                                   format("%s%s%s",
@@ -28,32 +27,36 @@ locals {
                                                   )
                                                 )
                                               )
-  resource_group_library_location           = local.resource_group_exists ? (
+  resource_group_library_location           = var.infrastructure.resource_group.exists ? (
                                                  data.azurerm_resource_group.library[0].location) : (
                                                  azurerm_resource_group.library[0].location
                                                )
 
   // Storage account for sapbits
-  sa_sapbits_exists                         = length(var.storage_account_sapbits.arm_id) > 0
-  sa_sapbits_name                           = local.sa_sapbits_exists ? (
-                                                split("/", var.storage_account_sapbits.arm_id)[8]) : (
+  storage_account_SAPmedia                  = var.storage_account_sapbits.exists ? (
+                                                split("/", var.storage_account_sapbits.id)[8]) : (
                                                 length(var.storage_account_sapbits.name) > 0 ? (
                                                   var.storage_account_sapbits.name) : (
                                                   var.naming.storageaccount_names.LIBRARY.library_storageaccount_name
                                                 )
                                               )
-
-
-
-  // Storage account for tfstate
-  sa_tfstate_exists                         = length(var.storage_account_tfstate.arm_id) > 0
-
+  sapbits_blob_endpoint                     = var.storage_account_sapbits.exists ? (
+                                                data.azurerm_storage_account.storage_sapbits[0].primary_blob_endpoint) : (
+                                                azurerm_storage_account.storage_sapbits[0].primary_blob_endpoint
+                                              )
+  sapbits_location_base_path                = format("%s/%s",
+                                                trimsuffix(local.sapbits_blob_endpoint, "/"),
+                                                var.storage_account_sapbits.sapbits_blob_container.name
+                                              )
+  tfstate_blob_endpoint                     = var.storage_account_tfstate.exists ? (
+                                                data.azurerm_storage_account.storage_tfstate[0].primary_blob_endpoint) : (
+                                                azurerm_storage_account.storage_tfstate[0].primary_blob_endpoint
+                                              )
 
   // Comment out code with users.object_id for the time being.
   // deployer_users_id = try(local.deployer.users.object_id, [])
 
   // Current service principal
-  service_principal                         = try(var.service_principal, {})
 
   deployer_public_ip_address                = try(var.deployer_tfstate.deployer_public_ip_address, "")
 
@@ -64,9 +67,12 @@ locals {
 
   keyvault_id                               = try(var.deployer_tfstate.deployer_kv_user_arm_id, "")
 
+  management_network_id                     = coalesce(var.deployer.use ? try(var.deployer_tfstate.vnet_mgmt_id, "") : try(var.deployer_tfstate.additional_network_id, ""), var.deployer.management_network_id)
+
   virtual_additional_network_ids            = compact(
                                                 flatten(
                                                   [
+                                                    var.deployer.management_network_id,  
                                                     try(var.deployer_tfstate.subnet_mgmt_id, ""),
                                                     try(var.deployer_tfstate.subnet_webapp_id, ""),
                                                     try(var.deployer_tfstate.subnets_to_add_to_firewall_for_keyvaults_and_storage, [])

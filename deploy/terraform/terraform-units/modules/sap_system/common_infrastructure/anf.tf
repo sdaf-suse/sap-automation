@@ -9,7 +9,7 @@
 
 resource "azurerm_netapp_volume" "sapmnt" {
   provider                             = azurerm.main
-  count                                = var.NFS_provider == "ANF" ? (
+  count                                = var.NFS_provider == "ANF" && !var.application_tier.use_AFS_for_sapmnt ? (
                                            var.hana_ANF_volumes.use_existing_sapmnt_volume ? (
                                              0
                                              ) : (
@@ -41,8 +41,8 @@ resource "azurerm_netapp_volume" "sapmnt" {
   protocols                            = ["NFSv4.1"]
 
   export_policy_rule {
-                       allowed_clients     = ["0.0.0.0/0"]
-                       protocols_enabled   = ["NFSv4.1"]
+                       allowed_clients     = data.azurerm_virtual_network.vnet_sap.address_space
+                       protocol            = ["NFSv4.1"]
                        rule_index          = 1
                        unix_read_only      = false
                        unix_read_write     = true
@@ -60,7 +60,7 @@ resource "azurerm_netapp_volume" "sapmnt" {
 
 resource "azurerm_netapp_volume" "sapmnt_secondary" {
   provider                             = azurerm.main
-  count                                = var.NFS_provider == "ANF" ? (
+  count                                = var.NFS_provider == "ANF" && !var.application_tier.use_AFS_for_sapmnt ? (
                                            var.hana_ANF_volumes.sapmnt_use_clone_in_secondary_zone ? (
                                              1
                                              ) : (
@@ -82,15 +82,15 @@ resource "azurerm_netapp_volume" "sapmnt_secondary" {
 
   protocols                            = ["NFSv4.1"]
   network_features                     = "Standard"
-  zone                                 = length(local.scs_zones) > 1 && var.hana_ANF_volumes.use_zones ? (
-                                          try(local.scs_zones[1], null)) : length(local.scs_zones) > 0 ? try(local.scs_zones[0], null) : (
-                                          null
-                                          )
+  zone                                 = var.hana_ANF_volumes.use_zones ? (
+                                          length(local.scs_zones) > 1 ? try(local.scs_zones[1], null) : (
+                                            length(local.scs_zones) > 0 ? try(local.scs_zones[0], null) : null
+                                          )) : null
 
   tags                                 = var.tags
   export_policy_rule {
-                       allowed_clients     = ["0.0.0.0/0"]
-                       protocols_enabled   = ["NFSv4.1"]
+                       allowed_clients     = data.azurerm_virtual_network.vnet_sap.address_space
+                       protocol            = ["NFSv4.1"]
                        rule_index          = 1
                        unix_read_only      = false
                        unix_read_write     = true
@@ -112,7 +112,7 @@ resource "azurerm_netapp_volume" "sapmnt_secondary" {
 
 data "azurerm_netapp_volume" "sapmnt" {
   provider                             = azurerm.main
-  count                                = var.NFS_provider == "ANF" ? (
+  count                                = var.NFS_provider == "ANF" && !var.application_tier.use_AFS_for_sapmnt ? (
                                            var.hana_ANF_volumes.use_existing_sapmnt_volume ? (
                                              1
                                              ) : (
@@ -165,12 +165,12 @@ resource "azurerm_netapp_volume" "usrsap" {
   storage_quota_in_gb                  = var.hana_ANF_volumes.usr_sap_volume_size
   throughput_in_mibps                  = var.hana_ANF_volumes.usr_sap_volume_throughput
 
-  zone                                 = length(local.scs_zones) > 1 && var.hana_ANF_volumes.use_zones ? try(local.scs_zones[1], null) : length(local.scs_zones) > 0 ? try(local.scs_zones[0], null) : null
+  zone                                 = var.hana_ANF_volumes.use_zones && length(local.scs_zones) > 0 ? try(local.scs_zones[0], null) : null
   tags                                 = var.tags
 
   export_policy_rule {
-                       allowed_clients     = ["0.0.0.0/0"]
-                       protocols_enabled   = ["NFSv4.1"]
+                       allowed_clients     = data.azurerm_virtual_network.vnet_sap.address_space
+                       protocol            = ["NFSv4.1"]
                        rule_index          = 1
                        unix_read_only      = false
                        unix_read_write     = true

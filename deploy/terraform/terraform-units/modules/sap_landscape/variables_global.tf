@@ -41,7 +41,7 @@ variable "infrastructure"                               {
 
                                                            validation {
                                                              condition = (
-                                                               length(trimspace(try(var.infrastructure.virtual_networks.sap.arm_id, ""))) != 0 || length(var.infrastructure.virtual_networks.sap.address_space[0]) != 0
+                                                               length(trimspace(try(var.infrastructure.virtual_networks.sap.id, ""))) != 0 || length(var.infrastructure.virtual_networks.sap.address_space[0]) != 0
                                                              )
                                                              error_message = "Either the arm_id or (name and address_space) of the Virtual Network must be specified in the infrastructure.virtual_networks.sap block."
                                                            }
@@ -89,16 +89,15 @@ variable "key_vault"                                    {
                                                           validation {
                                                                        condition = (
                                                                          contains(keys(var.key_vault), "keyvault_id_for_deployment_credentials") ? (
-                                                                           length(split("/", var.key_vault.keyvault_id_for_deployment_credentials)) == 9) : (
-                                                                           true
-                                                                         )
-                                                                       )
+                                                                           (length(var.key_vault.keyvault_id_for_deployment_credentials) == 0 ? true : length(split("/", var.key_vault.keyvault_id_for_deployment_credentials)) == 9)) : (
+                                                                            true
+                                                                       ))
                                                                        error_message = "If specified, the spn_keyvault_id needs to be a correctly formed Azure resource ID."
                                                                      }
                                                           validation {
                                                                        condition = (
                                                                          contains(keys(var.key_vault), "keyvault_id_for_system_credentials") ? (
-                                                                           length(split("/", var.key_vault.keyvault_id_for_system_credentials)) == 9) : (
+                                                                           (length(var.key_vault.keyvault_id_for_system_credentials) == 0 ? true : length(split("/", var.key_vault.keyvault_id_for_system_credentials)) == 9)) : (
                                                                            true
                                                                          )
                                                                        )
@@ -119,14 +118,8 @@ variable "key_vault"                                    {
 
 variable "additional_users_to_add_to_keyvault_policies" { description = "Additional users to add to the key vault policies" }
 
-variable "enable_purge_control_for_keyvaults"           { description = "Disables the purge protection for Azure keyvaults." }
-
-
-variable "enable_rbac_authorization_for_keyvault"       { description = "Enables RBAC authorization for Azure keyvault" }
-
 variable "keyvault_private_endpoint_id"                 { description = "Existing private endpoint for key vault" }
 
-variable "soft_delete_retention_days"                   { description = "The number of days that items should be retained in the soft delete period" }
 
 
 #########################################################################################
@@ -189,8 +182,6 @@ variable "terraform_template_version"                   { description = "The ver
 
 variable "deployer_tfstate"                             { description = "Deployer remote tfstate file" }
 
-variable "service_principal"                            { description = "Current service principal used to authenticate to Azure" }
-
 variable "naming"                                       { description = "Defines the names for the resources" }
 
 variable "use_deployer"                                 { description = "Use the deployer" }
@@ -210,7 +201,7 @@ variable "ANF_settings"                                 {
                                                                       transport_volume_name         = ""
                                                                       transport_volume_size         = 32
                                                                       transport_volume_throughput   = 32
-
+                                                                      export_policy_client_access_list = []
                                                                       use_existing_install_volume   = false
                                                                       install_volume_name           = ""
                                                                       install_volume_size           = 128
@@ -244,6 +235,16 @@ variable "use_private_endpoint"                          {
                                                            type        = bool
                                                          }
 
+variable "private_endpoint_network_policies"             {
+                                                           description = "Controls network policy support for private endpoints on workload zone subnets"
+                                                           default     = "Enabled"
+                                                           type        = string
+                                                           validation {
+                                                             condition     = contains(["Disabled", "Enabled", "NetworkSecurityGroupEnabled", "RouteTableEnabled"], var.private_endpoint_network_policies)
+                                                             error_message = "The private_endpoint_network_policies value must be Disabled, Enabled, NetworkSecurityGroupEnabled, or RouteTableEnabled."
+                                                           }
+                                                         }
+
 variable "use_service_endpoint"                          {
                                                            description = "Boolean value indicating if service endpoints should be used for the deployment"
                                                            default     = false
@@ -266,6 +267,145 @@ variable "vm_settings"                                   {
                                                            }
                                                          }
 
+variable "utility_storage_settings"                      {
+                                                           description = "List of utility storage account configurations normalized from transform.tf."
+                                                           type = list(object({
+                                                             name                       = string
+                                                             account_kind               = string
+                                                             account_tier               = string
+                                                             account_replication_type    = string
+                                                             https_traffic_only_enabled = bool
+                                                             file_shares = list(object({
+                                                               name     = string
+                                                               quota    = number
+                                                               protocol = string
+                                                             }))
+                                                             blob_containers = list(object({
+                                                               name = string
+                                                               immutability_policy = optional(object({
+                                                                 immutability_period_in_days = optional(number, 30)
+                                                                 locked                      = optional(bool, false)
+                                                                 allow_irreversible_lock     = optional(bool, false)
+                                                                 protected_append_writes     = optional(string, "none")
+                                                               }), null)
+                                                             }))
+                                                             versioning_enabled = optional(bool, false)
+                                                             version_level_immutability = optional(object({
+                                                               immutability_period_in_days   = optional(number, 30)
+                                                               state                         = optional(string, "Unlocked")
+                                                               allow_protected_append_writes = optional(bool, false)
+                                                               allow_irreversible_lock       = optional(bool, false)
+                                                             }), null)
+                                                           }))
+                                                           default = []
+                                                           validation {
+                                                             condition = alltrue(flatten([
+                                                               for account in var.utility_storage_settings : [
+                                                                 for container in account.blob_containers :
+                                                                 container.immutability_policy == null ? true : (
+                                                                   container.immutability_policy.immutability_period_in_days >= 1 &&
+                                                                   container.immutability_policy.immutability_period_in_days <= 146000
+                                                                 )
+                                                               ]
+                                                             ]))
+                                                             error_message = "Each configured utility blob container immutability period must be between 1 and 146000 days."
+                                                           }
+                                                           validation {
+                                                             condition = alltrue(flatten([
+                                                               for account in var.utility_storage_settings : [
+                                                                 for container in account.blob_containers :
+                                                                 container.immutability_policy == null ? true : contains(
+                                                                   ["none", "append_blobs", "all"],
+                                                                   container.immutability_policy.protected_append_writes
+                                                                 )
+                                                               ]
+                                                             ]))
+                                                             error_message = "Each configured utility blob container protected append mode must be none, append_blobs, or all."
+                                                           }
+                                                           validation {
+                                                             condition = alltrue(flatten([
+                                                               for account in var.utility_storage_settings : [
+                                                                 for container in account.blob_containers :
+                                                                 container.immutability_policy == null ? true : (
+                                                                   !container.immutability_policy.locked ||
+                                                                   container.immutability_policy.allow_irreversible_lock
+                                                                 )
+                                                               ]
+                                                             ]))
+                                                             error_message = "A locked utility blob container immutability policy requires allow_irreversible_lock to be true. Locking is irreversible: Azure never permits deleting a locked time-based retention policy, so terraform destroy for the container, the storage account and the workload zone is blocked permanently, not just until retention expires. Teardown then requires an out-of-band procedure."
+                                                           }
+                                                           validation {
+                                                             condition = alltrue(flatten([
+                                                               for account in var.utility_storage_settings : [
+                                                                 for container in account.blob_containers :
+                                                                 container.immutability_policy == null ? true : (
+                                                                   length(trimspace(account.name)) > 0 &&
+                                                                   length(trimspace(container.name)) > 0
+                                                                 )
+                                                               ]
+                                                             ]))
+                                                             error_message = "Utility storage accounts and blob containers with an immutability policy must have explicit non-empty names."
+                                                           }
+                                                           validation {
+                                                             condition = length(flatten([
+                                                               for account in var.utility_storage_settings : [
+                                                                 for container in account.blob_containers : "${account.name}/${container.name}"
+                                                                 if container.immutability_policy != null
+                                                               ]
+                                                             ])) == length(distinct(flatten([
+                                                               for account in var.utility_storage_settings : [
+                                                                 for container in account.blob_containers : "${account.name}/${container.name}"
+                                                                 if container.immutability_policy != null
+                                                               ]
+                                                             ])))
+                                                             error_message = "Utility blob containers with immutability policies must have unique account and container name pairs."
+                                                           }
+                                                           validation {
+                                                             condition = alltrue([
+                                                               for account in var.utility_storage_settings :
+                                                               account.version_level_immutability == null || account.versioning_enabled
+                                                             ])
+                                                             error_message = "A utility storage account with version_level_immutability must also set versioning_enabled to true. Azure requires blob versioning before version-level immutability can be enabled."
+                                                           }
+                                                           validation {
+                                                             condition = alltrue([
+                                                               for account in var.utility_storage_settings :
+                                                               !account.versioning_enabled || contains(["StorageV2", "BlockBlobStorage"], account.account_kind)
+                                                             ])
+                                                             error_message = "Blob versioning and version-level immutability are only supported on StorageV2 or BlockBlobStorage utility storage accounts; they are not available on FileStorage accounts."
+                                                           }
+                                                           validation {
+                                                             condition = alltrue([
+                                                               for account in var.utility_storage_settings :
+                                                               account.version_level_immutability == null ? true : (
+                                                                 account.version_level_immutability.immutability_period_in_days >= 1 &&
+                                                                 account.version_level_immutability.immutability_period_in_days <= 146000
+                                                               )
+                                                             ])
+                                                             error_message = "Each configured utility storage account version-level immutability period must be between 1 and 146000 days."
+                                                           }
+                                                           validation {
+                                                             condition = alltrue([
+                                                               for account in var.utility_storage_settings :
+                                                               account.version_level_immutability == null ? true : contains(
+                                                                 ["Disabled", "Unlocked", "Locked"],
+                                                                 account.version_level_immutability.state
+                                                               )
+                                                             ])
+                                                             error_message = "Each configured utility storage account version-level immutability state must be Disabled, Unlocked, or Locked."
+                                                           }
+                                                           validation {
+                                                             condition = alltrue([
+                                                               for account in var.utility_storage_settings :
+                                                               account.version_level_immutability == null ? true : (
+                                                                 account.version_level_immutability.state != "Locked" ||
+                                                                 account.version_level_immutability.allow_irreversible_lock
+                                                               )
+                                                             ])
+                                                             error_message = "A Locked utility storage account version-level immutability policy requires allow_irreversible_lock to be true. Locking is irreversible: Azure never permits returning the account policy to Unlocked or Disabled, and the account cannot be deleted until every protected blob version is removed after its retention period."
+                                                           }
+                                                         }
+
 variable "peer_with_control_plane_vnet"                  { description = "Defines in the SAP VNet will be peered with the controlplane VNet" }
 
 variable "enable_firewall_for_keyvaults_and_storage"     { description = "Boolean value indicating if firewall should be enabled for key vaults and storage" }
@@ -274,7 +414,14 @@ variable "public_network_access_enabled"                 { description = "Define
 
 variable "use_AFS_for_shared_storage"                    {
                                                            description = "If true, will use AFS for installation media."
-                                                           default = false
+                                                           type        = bool
+                                                           default     = false
+                                                         }
+
+variable "AFS_enable_encryption_in_transit"              {
+                                                           description = "Enable encryption in transit for Azure Files"
+                                                           type        = bool
+                                                           default     = false
                                                          }
 
 variable "tags"                                          { description = "List of tags to associate to all resources" }
@@ -282,6 +429,6 @@ variable "tags"                                          { description = "List o
 
 variable "data_plane_available"                          {
                                                            description = "Boolean value indicating if storage account access is via data plane"
-                                                           default     = false
+                                                           default     = true
                                                            type        = bool
                                                          }

@@ -14,9 +14,10 @@ module "sap_library" {
                                        azurerm.privatelinkdnsmanagement = azurerm.privatelinkdnsmanagement
                                      }
   Agent_IP                          = var.add_Agent_IP ? var.Agent_IP : ""
+  application_configuration_deployment = var.application_configuration_deployment
   bootstrap                         = false
   deployer                          = local.deployer
-  deployer_tfstate                  = try(data.terraform_remote_state.deployer[0].outputs, [])
+  deployer_tfstate                  = try(data.terraform_remote_state.deployer[0].outputs , {})
   infrastructure                    = local.infrastructure
   key_vault                         = local.key_vault
   naming                            = length(var.name_override_file) > 0 ? local.custom_names : module.sap_namegenerator.naming
@@ -27,15 +28,14 @@ module "sap_library" {
   use_custom_dns_a_registration     = var.use_custom_dns_a_registration
   use_private_endpoint              = var.use_private_endpoint
   dns_settings                      = local.dns_settings
-  service_principal                 = local.account
 
 }
 
 module "sap_namegenerator" {
   source                            = "../../terraform-units/modules/sap_namegenerator"
-  codename                          = try(local.infrastructure.codename, "")
-  deployer_environment              = try(local.deployer.environment, local.infrastructure.environment)
-  deployer_location                 = try(local.deployer.region, local.infrastructure.region)
+  codename                          = local.infrastructure.codename
+  deployer_environment              = local.infrastructure.environment
+  deployer_location                 = local.infrastructure.region
   environment                       = local.infrastructure.environment
   location                          = local.infrastructure.region
   management_vnet_name              = ""

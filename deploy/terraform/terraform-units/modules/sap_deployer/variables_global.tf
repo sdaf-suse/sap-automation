@@ -15,10 +15,11 @@ variable "bootstrap"                       { description = "Defines the phase of
 variable "configure"                       { description = "Value indicating if deployer should be configured" }
 variable "infrastructure"                  { description = "Dictionary of information about the common infrastructure" }
 variable "naming"                          { description = "Defines the names for the resources" }
+variable "naming_new"                      { description = "Defines the additional names for the resources" }
 variable "options"                         { description = "Dictionary of miscallaneous parameters" }
 variable "place_delete_lock_on_resources"  { description = "If defined, a delete lock will be placed on the key resources" }
 variable "ssh-timeout"                     { description = "SSH timeout" }
-variable "tf_version"                      { description = "Terraform version to install on deployer" }
+variable "network_logical_name"            { description = "Logical name of the network" }
 variable "use_private_endpoint"            { description = "Boolean value indicating if private endpoint should be used for the deployment" }
 variable "use_service_endpoint"            { description = "Boolean value indicating if service endpoints should be used for the deployment" }
 
@@ -50,11 +51,6 @@ variable "soft_delete_retention_days"  { description = "The number of days that 
 #                                                                                       #
 #########################################################################################
 
-variable "app_registration_app_id"     { description = "App registration app id" }
-variable "use_webapp"                  {
-                                         description = "value indicating if webapp should be deployed"
-                                         default = false
-                                       }
 variable "sa_connection_string"        { description = "Storage account connection string" }
 
 variable "webapp_client_secret"        { description = "App registration client secret" }
@@ -97,19 +93,18 @@ variable "deployer_vm_count"           {
                                          default     = 1
                                        }
 variable "arm_client_id"               { description = "ARM client id" }
-
-
+variable "platform"                    {
+                                         description = "Type of agent to be used"
+                                         type        = string
+                                         default     = "devops"
+                                       }
 
 #########################################################################################
 #                                                                                       #
-#  ADO definitioms                                                                      #
+#  ADO definitions                                                                      #
 #                                                                                       #
 #########################################################################################
 
-variable "agent_pool"                  { description = "If provided, contains the name of the agent pool to be used" }
-variable "agent_pat"                   { description = "If provided, contains the Personal Access Token to be used" }
-variable "agent_ado_url"               { description = "If provided, contains the Url to the ADO repository" }
-variable "ansible_core_version"        { description = "If provided, the version of ansible core to be installed" }
 variable "Agent_IP"                    { description = "If provided, contains the IP address of the agent" }
 variable "spn_id"                      { description = "SPN ID to be used for the deployment" }
 
@@ -121,6 +116,8 @@ variable "spn_id"                      { description = "SPN ID to be used for th
 #######################################4#######################################8
 
 variable "app_service"                 { description = "Details of the Application Service" }
+
+variable "app_config_service"          { description = "Details of the Application Configuration Service" }
 
 variable "additional_network_id"       { description = "Additional network ID" }
 

@@ -47,7 +47,7 @@ output "created_resource_group_subscription_id" {
 
 output "vnet_sap_id"                            {
                                                   description = "Azure resource identifier for the Virtual Network"
-                                                  value       = local.SAP_virtualnetwork_exists ? (
+                                                  value       = var.infrastructure.virtual_networks.sap.exists ? (
                                                                   data.azurerm_virtual_network.vnet_sap[0].id) : (
                                                                   azurerm_virtual_network.vnet_sap[0].id
                                                                 )
@@ -60,7 +60,7 @@ output "random_id"                              {
 
 output "route_table_id"                         {
                                                   description = "Azure resource identifier for the route table"
-                                                  value       = local.SAP_virtualnetwork_exists ? (
+                                                  value       = var.infrastructure.virtual_networks.sap.exists ? (
                                                                    "") : (
                                                                    try(azurerm_route_table.rt[0].id, "")
                                                                  )
@@ -68,120 +68,131 @@ output "route_table_id"                         {
 
 output "admin_subnet_id"                        {
                                                   description = "Azure resource identifier for the admin subnet"
-                                                  value       = local.admin_subnet_defined ? (
-                                                                  local.admin_subnet_existing ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_admin.arm_id) : (
-                                                                    try(azurerm_subnet.admin[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_admin.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_admin.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_admin.id) : (
+                                                                    azurerm_subnet.admin[0].id)) : (
                                                                   ""
                                                                 )
                                                 }
 
 output "app_subnet_id"                          {
                                                   description = "Azure resource identifier for the app subnet"
-                                                  value       = local.application_subnet_defined ? (
-                                                                  local.application_subnet_existing ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_app.arm_id) : (
-                                                                    try(azurerm_subnet.app[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_app.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_app.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_app.id) : (
+                                                                    azurerm_subnet.app[0].id)) : (
                                                                   ""
                                                                 )
                                                 }
 
 output "db_subnet_id"                           {
                                                   description = "Azure resource identifier for the db subnet"
-                                                  value       = local.database_subnet_defined ? (
-                                                                  local.database_subnet_existing ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_db.arm_id) : (
-                                                                    try(azurerm_subnet.db[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_db.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_db.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_db.id) : (
+                                                                    azurerm_subnet.db[0].id)) : (
                                                                   ""
                                                                 )
                                                 }
 
 output "web_subnet_id"                          {
                                                   description = "Azure resource identifier for the web subnet"
-                                                  value       = local.web_subnet_defined ? (
-                                                                  local.web_subnet_existing ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_web.arm_id) : (
-                                                                    try(azurerm_subnet.web[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_web.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_web.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_web.id) : (
+                                                                    azurerm_subnet.web[0].id)) : (
                                                                   ""
-                                                                 )
+                                                                )
                                                 }
 
 output "storage_subnet_id"                      {
                                                   description = "Azure resource identifier for the storage subnet"
-                                                  value       = local.storage_subnet_defined ? (
-                                                                  local.storage_subnet_existing ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_storage.arm_id) : (
-                                                                    try(azurerm_subnet.storage[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_storage.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_storage.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_storage.id) : (
+                                                                    azurerm_subnet.storage[0].id)) : (
                                                                   ""
-                                                                 )
+                                                                )
+                                                }
+
+output "private_endpoint_network_policies"       {
+                                                  description = "Private endpoint network policy state for module-created workload zone subnets"
+                                                  value = {
+                                                    admin   = try(azurerm_subnet.admin[0].private_endpoint_network_policies, null)
+                                                    app     = try(azurerm_subnet.app[0].private_endpoint_network_policies, null)
+                                                    db      = try(azurerm_subnet.db[0].private_endpoint_network_policies, null)
+                                                    storage = try(azurerm_subnet.storage[0].private_endpoint_network_policies, null)
+                                                    web     = try(azurerm_subnet.web[0].private_endpoint_network_policies, null)
+                                                  }
                                                 }
 
 output "anf_subnet_id"                          {
                                                   description = "Azure resource identifier for the anf subnet"
-                                                  value       = var.NFS_provider == "ANF" && local.ANF_subnet_defined ? (
-                                                                  local.ANF_subnet_existing ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_anf.arm_id) : (
-                                                                    try(azurerm_subnet.anf[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_anf.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_anf.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_anf.id) : (
+                                                                    azurerm_subnet.anf[0].id)) : (
                                                                   ""
                                                                 )
                                                 }
 
 output "ams_subnet_id"                          {
                                                   description = "Azure resource identifier for the ams subnet"
-                                                  value       = local.ams_subnet_defined ? (
-                                                                  local.ams_subnet_existing ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_ams.arm_id) : (
-                                                                    try(azurerm_subnet.ams[0].id, ""))) : (
+                                                  value       = local.create_ams_instance ? var.infrastructure.virtual_networks.sap.subnet_ams.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_ams.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_ams.id) : (
+                                                                    azurerm_subnet.ams[0].id)) : (
                                                                   ""
-                                                                  )
+                                                                ) : ""
                                                 }
 
 output "admin_nsg_id"                           {
                                                   description = "Azure resource identifier for the admin subnet network security group"
-                                                  value       = local.admin_subnet_defined ? (
-                                                                  local.admin_subnet_nsg_exists ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_admin.nsg.arm_id) : (
-                                                                    try(azurerm_network_security_group.admin[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_admin.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_admin.nsg.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_admin.nsg.id) : (
+                                                                    azurerm_network_security_group.admin[0].id)) : (
                                                                   ""
                                                                 )
                                                 }
 
 output "app_nsg_id"                             {
                                                   description = "Azure resource identifier for the app subnet network security group"
-                                                  value       = local.application_subnet_defined ? (
-                                                                  local.application_subnet_nsg_exists ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_app.nsg.arm_id) : (
-                                                                    try(azurerm_network_security_group.app[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_app.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_app.nsg.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_app.nsg.id) : (
+                                                                    azurerm_network_security_group.app[0].id)) : (
                                                                   ""
                                                                 )
                                                 }
 
 output "db_nsg_id"                              {
                                                   description = "Azure resource identifier for the database subnet network security group"
-                                                  value       = local.database_subnet_defined ? (
-                                                                  local.database_subnet_nsg_exists ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_db.nsg.arm_id) : (
-                                                                    try(azurerm_network_security_group.db[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_db.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_db.nsg.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_db.nsg.id) : (
+                                                                    azurerm_network_security_group.db[0].id)) : (
                                                                   ""
                                                                 )
                                                 }
 
 output "web_nsg_id"                             {
                                                   description = "Azure resource identifier for the web subnet network security group"
-                                                  value       = local.web_subnet_defined ? (
-                                                                  local.web_subnet_nsg_exists ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_web.nsg.arm_id) : (
-                                                                    try(azurerm_network_security_group.web[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_web.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_web.nsg.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_web.nsg.id) : (
+                                                                    azurerm_network_security_group.web[0].id)) : (
                                                                   ""
                                                                 )
                                                 }
 
 output "storage_nsg_id"                         {
                                                   description = "Azure resource identifier for the storage subnet network security group"
-                                                  value       = local.storage_subnet_defined ? (
-                                                                  local.storage_subnet_nsg_exists ? (
-                                                                    var.infrastructure.virtual_networks.sap.subnet_storage.nsg.arm_id) : (
-                                                                    try(azurerm_network_security_group.storage[0].id, ""))) : (
+                                                  value       = var.infrastructure.virtual_networks.sap.subnet_storage.defined ? (
+                                                                  var.infrastructure.virtual_networks.sap.subnet_storage.nsg.exists ? (
+                                                                    var.infrastructure.virtual_networks.sap.subnet_storage.nsg.id) : (
+                                                                    azurerm_network_security_group.storage[0].id)) : (
                                                                   ""
                                                                 )
                                                 }
@@ -200,9 +211,17 @@ output "subnet_mgmt_id"                         {
 
 output "kv_user"                                {
                                                   description = "Azure resource identifier for the user credential keyvault"
-                                                  value       = local.user_keyvault_exist ? (
-                                                                  try(data.azurerm_key_vault.kv_user[0].id, "")) : (
-                                                                  try(azurerm_key_vault.kv_user[0].id, "")
+                                                  value       = var.key_vault.user.exists ? (
+                                                                  data.azurerm_key_vault.kv_user[0].id) : (
+                                                                  azurerm_key_vault.kv_user[0].id
+                                                                )
+                                                }
+
+output "user_credential_vault_id"               {
+                                                  description = "Azure resource identifier for the user credential keyvault"
+                                                  value       = var.key_vault.user.exists ? (
+                                                                  data.azurerm_key_vault.kv_user[0].id) : (
+                                                                  azurerm_key_vault.kv_user[0].id
                                                                 )
                                                 }
 
@@ -213,12 +232,12 @@ output "kv_user"                                {
 
 output "sid_public_key_secret_name"             {
                                                   description = "Azure Keyvault secret name for the Public key"
-                                                  value       = local.sid_pk_name
+                                                  value       = local.sid_private_key_secret_name
                                                 }
 
 output "sid_private_key_secret_name"            {
                                                   description = "Azure Keyvault secret name for the Private key"
-                                                  value       = local.sid_ppk_name
+                                                  value       = local.sid_public_key_secret_name
                                                 }
 
 output "sid_username_secret_name"              {
@@ -245,7 +264,7 @@ output "workload_zone_prefix"                   {
 
 output "storageaccount_name"                    {
                                                   description = "Diagnostics storage account name"
-                                                  value       = length(var.diagnostics_storage_account.arm_id) > 0 ? (
+                                                  value       = length(var.diagnostics_storage_account.id) > 0 ? (
                                                                   data.azurerm_storage_account.storage_bootdiag[0].name) : (
                                                                   try(azurerm_storage_account.storage_bootdiag[0].name, "")
                                                                 )
@@ -253,7 +272,7 @@ output "storageaccount_name"                    {
 
 output "storageaccount_resourcegroup_name"      {
                                                   description = "Diagnostics storage account's resource group name"
-                                                  value       = length(var.diagnostics_storage_account.arm_id) > 0 ? (
+                                                  value       = length(var.diagnostics_storage_account.id) > 0 ? (
                                                                   data.azurerm_storage_account.storage_bootdiag[0].resource_group_name) : (
                                                                   try(azurerm_storage_account.storage_bootdiag[0].resource_group_name, "")
                                                                 )
@@ -261,7 +280,7 @@ output "storageaccount_resourcegroup_name"      {
 
 output "storage_bootdiag_endpoint"              {
                                                   description = "Diagnostics storage account's private endpoint's Azure resource identifier"
-                                                  value       = length(var.diagnostics_storage_account.arm_id) > 0 ? (
+                                                  value       = length(var.diagnostics_storage_account.id) > 0 ? (
                                                                   data.azurerm_storage_account.storage_bootdiag[0].primary_blob_endpoint) : (
                                                                   try(azurerm_storage_account.storage_bootdiag[0].primary_blob_endpoint, "")
                                                                 )
@@ -270,16 +289,16 @@ output "storage_bootdiag_endpoint"              {
 //Witness Info
 output "witness_storage_account"                {
                                                   description = "Witness storage account"
-                                                  value       = length(var.witness_storage_account.arm_id) > 0 ? (
-                                                                  split("/", var.witness_storage_account.arm_id)[8]) : (
-                                                                  local.witness_storageaccount_name
+                                                  value       = length(var.witness_storage_account.id) > 0 ? (
+                                                                  split("/", var.witness_storage_account.id)[8]) : (
+                                                                  var.naming.storageaccount_names.WORKLOAD_ZONE.witness_storageaccount_name
                                                                 )
                                                 }
 
 output "witness_storage_account_key"            {
                                                   description = "Witness storage account key"
                                                   sensitive   = true
-                                                  value       = length(var.witness_storage_account.arm_id) > 0 ? (
+                                                  value       = length(var.witness_storage_account.id) > 0 ? (
                                                                   data.azurerm_storage_account.witness_storage[0].primary_access_key) : (
                                                                   try(azurerm_storage_account.witness_storage[0].primary_access_key, "")
                                                                 )
@@ -294,6 +313,22 @@ output "transport_storage_account_id" {
                                                                   )) : (
                                                                   ""
                                                                 )
+                                                }
+
+###############################################################################
+#                                                                             #
+#                            Utility Storage                                  #
+#                                                                             #
+###############################################################################
+
+output "utility_storage_account_ids"             {
+                                                  description = "List of utility storage account IDs"
+                                                  value       = azurerm_storage_account.utility[*].id
+                                                }
+
+output "utility_storage_account_names"           {
+                                                  description = "List of utility storage account names"
+                                                  value       = azurerm_storage_account.utility[*].name
                                                 }
 
 ###############################################################################
@@ -347,13 +382,13 @@ output "ANF_pool_settings"                      {
                                                    value       = var.ANF_settings.use ? (
                                                                    {
                                                                      use_ANF = var.NFS_provider == "ANF"
-                                                                     account_name = length(var.ANF_settings.arm_id) > 0 ? (
+                                                                     account_name = length(var.ANF_settings.id) > 0 ? (
                                                                        data.azurerm_netapp_account.workload_netapp_account[0].name) : (
                                                                        try(azurerm_netapp_account.workload_netapp_account[0].name, "")
                                                                      )
 
-                                                                     account_id = length(var.ANF_settings.arm_id) > 0 ? (
-                                                                       var.ANF_settings.arm_id) : (
+                                                                     account_id = length(var.ANF_settings.id) > 0 ? (
+                                                                       var.ANF_settings.id) : (
                                                                        try(azurerm_netapp_account.workload_netapp_account[0].id, "")
                                                                      )
 
@@ -376,13 +411,13 @@ output "ANF_pool_settings"                      {
                                                                        try(azurerm_netapp_pool.workload_netapp_pool[0].size_in_tb, 0)
                                                                      )
 
-                                                                     subnet_id = local.ANF_subnet_defined ? (
-                                                                       local.ANF_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_anf.arm_id : try(azurerm_subnet.anf[0].id, "")) : (
+                                                                     subnet_id = var.infrastructure.virtual_networks.sap.subnet_anf.defined ? (
+                                                                       var.infrastructure.virtual_networks.sap.subnet_anf.exists ? var.infrastructure.virtual_networks.sap.subnet_anf.id : try(azurerm_subnet.anf[0].id, "")) : (
                                                                        ""
                                                                      )
 
                                                                      resource_group_name = var.ANF_settings.use_existing_pool ? (
-                                                                       split("/", var.ANF_settings.arm_id)[4]) : (
+                                                                       split("/", var.ANF_settings.id)[4]) : (
                                                                        local.resource_group_exists ? (
                                                                          data.azurerm_resource_group.resource_group[0].name) : (
                                                                          azurerm_resource_group.resource_group[0].name
@@ -588,3 +623,266 @@ output "ng_resource_id"                        {
                                                   description = "Azure resource identifier for the NAT Gateway"
                                                   value       = local.create_nat_gateway ? azurerm_nat_gateway.ng[0].id : ""
                                                 }
+
+
+resource "local_file" "resource_group_md" {
+  content = templatefile(format("%s/templates/workload_zone.tmpl", path.module), {
+              resource_group_name         = local.resource_group_exists ? (
+                                              data.azurerm_resource_group.resource_group[0].name) : (
+                                              azurerm_resource_group.resource_group[0].name
+                                            )
+              subscription_id             = local.resource_group_exists ? (
+                                              split("/", data.azurerm_resource_group.resource_group[0].id))[2] : (
+                                              split("/", azurerm_resource_group.resource_group[0].id)[2]
+                                            )
+              url                         = format("https://portal.azure.com/#@%s/resource/subscriptions/%s/resourceGroups/%s/overview",
+                                                    data.azurerm_client_config.current.tenant_id,
+                                                    local.resource_group_exists ? (
+                                                      split("/", data.azurerm_resource_group.resource_group[0].id))[2] : (
+                                                      split("/", azurerm_resource_group.resource_group[0].id)[2]),
+                                                    local.resource_group_exists ? (
+                                                      data.azurerm_resource_group.resource_group[0].name) : (
+                                                      azurerm_resource_group.resource_group[0].name)
+                                                  )
+              key_vault_url               = format("https://portal.azure.com/#@%s/resource/subscriptions/%s/resourceGroups/%s/providers/Microsoft.KeyVault/vaults/%s/overview",
+                                                    data.azurerm_client_config.current.tenant_id,
+                                                    local.resource_group_exists ? (
+                                                      split("/", data.azurerm_resource_group.resource_group[0].id))[2] : (
+                                                      split("/", azurerm_resource_group.resource_group[0].id)[2]),
+                                                    local.resource_group_exists ? (
+                                                      data.azurerm_resource_group.resource_group[0].name) : (
+                                                      azurerm_resource_group.resource_group[0].name),
+                                                    var.key_vault.exists ?
+                                                      data.azurerm_key_vault.kv_user[0].name :
+                                                      azurerm_key_vault.kv_user[0].name
+                                                    )
+              key_vault_name              = var.key_vault.exists ? (
+                                                    data.azurerm_key_vault.kv_user[0].name) : (
+                                                    azurerm_key_vault.kv_user[0].name
+                                                  )
+
+              password_secret_name        = local.sid_password_secret_name
+              username_secret_name        = local.sid_username_secret_name
+              ssh_secret_name             = local.sid_public_key_secret_name
+
+              key_vault_url               = format("https://portal.azure.com/#@%s/resource/subscriptions/%s/resourceGroups/%s/providers/Microsoft.KeyVault/vaults/%s/overview",
+                                                    data.azurerm_client_config.current.tenant_id,
+                                                    var.key_vault.exists ? (
+                                                      split( "/", data.azurerm_key_vault.kv_user[0].id)[2]) : (
+                                                      split( "/", azurerm_key_vault.kv_user[0].id)[2]
+                                                    ),
+                                                    var.key_vault.exists ? (
+                                                      split("/", data.azurerm_key_vault.kv_user[0].id)[4]) : (
+                                                      split("/", azurerm_key_vault.kv_user[0].id)[4]
+                                                    ),
+                                                    var.key_vault.exists ? (
+                                                      data.azurerm_key_vault.kv_user[0].name) : (
+                                                      azurerm_key_vault.kv_user[0].name
+                                                    )
+                                                    )
+              username_secret_url         = format("https://portal.azure.com/#@%s/asset/Microsoft_Azure_KeyVault/Secret/https://%s.vault.azure.net/secrets/%s",
+                                                    data.azurerm_client_config.current.tenant_id,
+                                                    var.key_vault.exists ? (
+                                                      data.azurerm_key_vault.kv_user[0].name) : (
+                                                      azurerm_key_vault.kv_user[0].name
+                                                    ),
+                                                    local.sid_username_secret_name
+                                                    )
+              password_secret_url         = format("https://portal.azure.com/#@%s/asset/Microsoft_Azure_KeyVault/Secret/https://%s.vault.azure.net/secrets/%s",
+                                                    data.azurerm_client_config.current.tenant_id,
+                                                    var.key_vault.exists ? (
+                                                      data.azurerm_key_vault.kv_user[0].name) : (
+                                                      azurerm_key_vault.kv_user[0].name
+                                                    ),
+                                                    local.sid_password_secret_name
+                                                    )
+              ssh_secret_url              = format("https://portal.azure.com/#@%s/asset/Microsoft_Azure_KeyVault/Secret/https://%s.vault.azure.net/secrets/%s",
+                                                    data.azurerm_client_config.current.tenant_id,
+                                                    var.key_vault.exists ? (
+                                                      data.azurerm_key_vault.kv_user[0].name) : (
+                                                      azurerm_key_vault.kv_user[0].name
+                                                    ),
+                                                    local.sid_public_key_secret_name
+                                                    )
+
+
+
+              }
+            )
+  filename             = format("%s/readme.md", path.cwd)
+  file_permission      = "0660"
+  directory_permission = "0770"
+}
+
+resource "azurerm_storage_blob" "readme" {
+  provider               = azurerm.deployer
+  depends_on            = [local_file.resource_group_md]
+  name                   = format("LANDSCAPE/%s/readme.md", trimspace(var.naming.prefix.WORKLOAD_ZONE))
+  storage_account_name   = var.infrastructure.terraform_storage_account_name
+  storage_container_name = "tfvars"
+  type                   = "Block"
+  source                 = local_file.resource_group_md.filename
+}
+
+
+resource "azurerm_storage_blob" "tfvars" {
+  provider               = azurerm.deployer
+  depends_on            = [local_file.resource_group_md]
+  name                   = format("LANDSCAPE/%s-INFRASTRUCTURE/%s-INFRASTRUCTURE.tfvars", trimspace(var.naming.prefix.WORKLOAD_ZONE), trimspace(var.naming.prefix.WORKLOAD_ZONE))
+  storage_account_name   = var.infrastructure.terraform_storage_account_name
+  storage_container_name = "tfvars"   
+  type                   = "Block"
+  source                 = format("%s/%s-INFRASTRUCTURE.tfvars", path.cwd,trimspace(var.naming.prefix.WORKLOAD_ZONE))
+}
+
+resource "azurerm_storage_blob" "tfvars_state" {
+  provider               = azurerm.deployer
+  count                  = fileexists(format("%s/.terraform/terraform.tfstate", path.cwd)) ? 1 : 0
+  depends_on             = [local_file.resource_group_md]
+  name                   = format("LANDSCAPE/%s-INFRASTRUCTURE/.terraform/terraform.tfstate", trimspace(var.naming.prefix.WORKLOAD_ZONE))
+  storage_account_name   = var.infrastructure.terraform_storage_account_name
+  storage_container_name = "tfvars"
+  type                   = "Block"
+  source                 = format("%s/.terraform/terraform.tfstate", path.cwd)
+}
+
+
+resource "local_file" "workload_zone_exports" {
+  content = templatefile(format("%s/templates/workload_zone_exports.tmpl", path.module), {
+              subscription_id             = local.resource_group_exists ? (
+                                           split("/", data.azurerm_resource_group.resource_group[0].id)[2]) : (
+                                           split("/", azurerm_resource_group.resource_group[0].id)[2]
+                                         )
+              app_configuration_name         = local.app_config_name
+              terraform_storage_account_name = var.infrastructure.terraform_storage_account_name
+              control_plane_name             = var.infrastructure.control_plane_name
+              workload_zone_name             = var.infrastructure.workload_zone_name
+              keyvault_name                  = var.deployer_tfstate.deployer_kv_user_name
+
+              }
+            )
+  filename             = format("%s/exports.sh", path.cwd)
+  file_permission      = "0660"
+  directory_permission = "0770"
+}
+###############################################################################
+#                            Test-support counts                              #
+#                                                                             #
+###############################################################################
+
+output "network_resource_counts"                    {
+                                                     description = "Cardinality (creation count) of workload-zone network resources for terraform test diagnostics. 1 = created (greenfield), 0 = looked up (brownfield)."
+                                                     value = {
+                                                       vnet                    = length(azurerm_virtual_network.vnet_sap)
+                                                       route_table             = length(azurerm_route_table.rt)
+                                                       keyvault                = length(azurerm_key_vault.kv_user)
+                                                       admin_subnet            = length(azurerm_subnet.admin)
+                                                       admin_nsg               = length(azurerm_network_security_group.admin)
+                                                       db_subnet               = length(azurerm_subnet.db)
+                                                       db_nsg                  = length(azurerm_network_security_group.db)
+                                                       app_subnet              = length(azurerm_subnet.app)
+                                                       app_nsg                 = length(azurerm_network_security_group.app)
+                                                       web_subnet              = length(azurerm_subnet.web)
+                                                       web_nsg                 = length(azurerm_network_security_group.web)
+                                                       storage_subnet          = length(azurerm_subnet.storage)
+                                                       storage_nsg             = length(azurerm_network_security_group.storage)
+                                                       anf_subnet              = length(azurerm_subnet.anf)
+                                                       anf_nsg                 = length(azurerm_network_security_group.anf)
+                                                       iscsi_subnet            = length(azurerm_subnet.iscsi)
+                                                       iscsi_nsg               = length(azurerm_network_security_group.iscsi)
+                                                       ams_subnet              = length(azurerm_subnet.ams)
+                                                       utility_storage_account = length(azurerm_storage_account.utility)
+                                                       utility_blob_container  = length(azurerm_storage_container.utility)
+                                                       utility_container_immutability_policy = length(azurerm_storage_container_immutability_policy.utility)
+                                                       nat_gateway             = length(azurerm_nat_gateway.ng)
+                                                       keyvault_private_endpoint = length(azurerm_private_endpoint.kv_user)
+                                                     }
+                                                    }
+
+output "utility_container_immutability_policy_settings" {
+                                                     description = "Resolved utility container immutability policy settings for terraform test diagnostics"
+                                                     value = {
+                                                       for policy_key, policy in azurerm_storage_container_immutability_policy.utility : policy_key => {
+                                                         container_index                    = local.utility_blob_container_immutability_policies[policy_key].container_index
+                                                         immutability_period_in_days         = policy.immutability_period_in_days
+                                                         locked                             = policy.locked
+                                                         protected_append_writes_enabled     = policy.protected_append_writes_enabled
+                                                         protected_append_writes_all_enabled = policy.protected_append_writes_all_enabled
+                                                       }
+                                                     }
+                                                    }
+
+output "utility_account_version_level_immutability_settings" {
+                                                     description = "Resolved utility storage account version-level immutability settings for terraform test diagnostics"
+                                                     value = {
+                                                       for account_index, account in azurerm_storage_account.utility : account_index => {
+                                                         versioning_enabled            = length(account.blob_properties) > 0 ? account.blob_properties[0].versioning_enabled : false
+                                                         state                         = length(account.immutability_policy) > 0 ? account.immutability_policy[0].state : null
+                                                         immutability_period_in_days   = length(account.immutability_policy) > 0 ? account.immutability_policy[0].period_since_creation_in_days : null
+                                                         allow_protected_append_writes = length(account.immutability_policy) > 0 ? account.immutability_policy[0].allow_protected_append_writes : null
+                                                       }
+                                                     }
+                                                    }
+
+output "vnet_tags"                                  {
+                                                     description = "Tags applied to the created workload VNet, if any"
+                                                     value       = try(azurerm_virtual_network.vnet_sap[0].tags, {})
+                                                    }
+
+output "netapp_resource_counts"                     {
+                                                     description = "Cardinality of NetApp account/pool resources for terraform test diagnostics"
+                                                     value = {
+                                                       account = length(azurerm_netapp_account.workload_netapp_account)
+                                                       pool    = length(azurerm_netapp_pool.workload_netapp_pool)
+                                                     }
+                                                    }
+
+output "dns_link_counts"                            {
+                                                     description = "Cardinality of Private Link DNS virtual-network links for terraform test diagnostics"
+                                                     value = {
+                                                       vnet_sap = length(azurerm_private_dns_zone_virtual_network_link.vnet_sap)
+                                                       file     = length(azurerm_private_dns_zone_virtual_network_link.vnet_sap_file)
+                                                       storage  = length(azurerm_private_dns_zone_virtual_network_link.storage)
+                                                       vault    = length(azurerm_private_dns_zone_virtual_network_link.vault)
+                                                     }
+                                                    }
+
+output "storage_account_counts"                     {
+                                                     description = "Cardinality of workload-zone storage account resources for terraform test diagnostics."
+                                                     value = {
+                                                      diagnostics = length(azurerm_storage_account.storage_bootdiag)
+                                                      witness     = length(azurerm_storage_account.witness_storage)
+                                                      transport   = length(azurerm_storage_account.transport)
+                                                      install     = length(azurerm_storage_account.install)
+                                                     }
+                                                    }
+
+output "ams_instance_created_count"                 {
+                                                     description = "Number of AMS instances created by this module"
+                                                     value       = length(azapi_resource.ams_instance)
+                                                    }
+
+output "iscsi_vm_count"                             {
+                                                     description = "Number of iSCSI VMs created by this module"
+                                                     value       = length(azurerm_linux_virtual_machine.iscsi)
+                                                    }
+
+output "resolved_iscsi_nic_ips"                     {
+                                                     description = "Resolved iSCSI NIC IP input list for terraform test diagnostics."
+                                                     value       = local.iscsi_nic_ips
+                                                    }
+
+output "utility_vm_count"                           {
+                                                     description = "Number of utility VMs created by this module"
+                                                     value       = length(azurerm_windows_virtual_machine.utility_vm) + length(azurerm_linux_virtual_machine.utility_vm)
+                                                    }
+
+output "utility_vm_computer_names"                  {
+                                                     description = "Planned utility VM computer names"
+                                                     value       = concat(azurerm_windows_virtual_machine.utility_vm[*].computer_name, azurerm_linux_virtual_machine.utility_vm[*].computer_name)
+                                                    }
+
+output "utility_vm_zones"                           {
+                                                     description = "Planned availability zones for utility VMs"
+                                                     value       = concat(azurerm_windows_virtual_machine.utility_vm[*].zone, azurerm_linux_virtual_machine.utility_vm[*].zone)
+                                                    }

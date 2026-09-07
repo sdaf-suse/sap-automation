@@ -56,7 +56,7 @@ resource "azurerm_network_interface_application_security_group_association" "db"
                                            0
                                          )
 
-  network_interface_id                 = var.use_admin_nic_for_asg && local.anydb_dual_nics ? azurerm_network_interface.anydb_admin[count.index].id : azurerm_network_interface.anydb_db[count.index].id
+  network_interface_id                 = var.use_admin_nic_for_asg && local.anydb_dual_network_interfaces ? azurerm_network_interface.anydb_admin[count.index].id : azurerm_network_interface.anydb_db[count.index].id
   application_security_group_id        = var.db_asg_id
 }
 
@@ -67,7 +67,7 @@ resource "azurerm_network_interface_application_security_group_association" "db"
 #######################################4#######################################8
 resource "azurerm_network_interface" "anydb_admin" {
   provider                             = azurerm.main
-  count                                = local.enable_deployment && local.anydb_dual_nics ? (
+  count                                = local.enable_deployment && local.anydb_dual_network_interfaces ? (
                                           var.database_server_count) : (
                                           0
                                         )
@@ -110,6 +110,7 @@ resource "azurerm_network_interface" "anydb_admin" {
 #                                                                              #
 #######################################4#######################################8
 resource "azurerm_linux_virtual_machine" "dbserver" {
+  #checkov:skip=CKV_AZURE_50: monitoring via monitoring_extension_db_lnx
   provider                             = azurerm.main
   depends_on                           = [var.anchor_vm]
   count                                = local.enable_deployment ? (
@@ -147,7 +148,7 @@ resource "azurerm_linux_virtual_machine" "dbserver" {
 
   zone                                 = local.zonal_deployment && !var.database.use_avset ? try(local.zones[count.index % max(local.db_zone_count, 1)], local.zones[0]) : null
 
-  network_interface_ids                = local.anydb_dual_nics ? (
+  network_interface_ids                = local.anydb_dual_network_interfaces ? (
                                           var.options.legacy_nic_order ? (
                                             [
                                               azurerm_network_interface.anydb_admin[count.index].id,
@@ -176,6 +177,9 @@ resource "azurerm_linux_virtual_machine" "dbserver" {
   bypass_platform_safety_checks_on_user_schedule_enabled = var.infrastructure.patch_mode != "AutomaticByPlatform" ? false : true
 
   tags                                 = merge(local.tags, var.tags)
+
+  # Set the disc controller type, default SCSI
+  disk_controller_type                 = var.infrastructure.disk_controller_type_database_tier
 
   encryption_at_host_enabled                             = var.infrastructure.encryption_at_host_enabled
 
@@ -255,6 +259,7 @@ resource "azurerm_linux_virtual_machine" "dbserver" {
 #                                                                              #
 #######################################4#######################################8
 resource "azurerm_windows_virtual_machine" "dbserver" {
+  #checkov:skip=CKV_AZURE_50: monitoring via monitoring_extension_db_win
   provider                             = azurerm.main
   count                                = local.enable_deployment ? (
                                            upper(local.anydb_ostype) == "WINDOWS" ? (
@@ -291,7 +296,7 @@ resource "azurerm_windows_virtual_machine" "dbserver" {
 
   zone                                 = local.zonal_deployment && !var.database.use_avset ? try(local.zones[count.index % max(local.db_zone_count, 1)], local.zones[0]) : null
 
-  network_interface_ids                = local.anydb_dual_nics ? (
+  network_interface_ids                = local.anydb_dual_network_interfaces ? (
                                           var.options.legacy_nic_order ? (
                                             [
                                               azurerm_network_interface.anydb_admin[count.index].id,
@@ -314,7 +319,7 @@ resource "azurerm_windows_virtual_machine" "dbserver" {
   patch_mode                                             = var.infrastructure.patch_mode == "ImageDefault" ? "Manual" : var.infrastructure.patch_mode
   patch_assessment_mode                                  = var.infrastructure.patch_assessment_mode
   bypass_platform_safety_checks_on_user_schedule_enabled = var.infrastructure.patch_mode != "AutomaticByPlatform" ? false : true
-  enable_automatic_updates                               = !(var.infrastructure.patch_mode == "ImageDefault")
+  automatic_updates_enabled                              = !(var.infrastructure.patch_mode == "ImageDefault")
 
   admin_username                       = var.sid_username
   admin_password                       = var.sid_password
@@ -389,7 +394,17 @@ resource "azurerm_windows_virtual_machine" "dbserver" {
 #                                     Disks                                    #
 #                                                                              #
 #######################################4#######################################8
+
+# determine if we have any backup disks with ZRS
+locals {
+  is_anydb_backup_disk_with_zrs = [
+    for idx, disk in local.anydb_disks :
+      can(regex("-(backup)", disk.suffix)) && disk.storage_account_type == "Premium_ZRS"
+  ]
+}
+
 resource "azurerm_managed_disk" "disks" {
+  #checkov:skip=CKV_AZURE_251: disk export via private endpoint not used
   provider                             = azurerm.main
   count                                = local.enable_deployment ? length(local.anydb_disks) : 0
   name                                 = format("%s%s%s%s%s",
@@ -408,21 +423,32 @@ resource "azurerm_managed_disk" "disks" {
   disk_size_gb                         = local.anydb_disks[count.index].disk_size_gb
   tier                                 = local.anydb_disks[count.index].tier
   disk_encryption_set_id               = try(var.options.disk_encryption_set_id, null)
-  disk_iops_read_write                 = "UltraSSD_LRS" == local.anydb_disks[count.index].storage_account_type ? (
+
+  # Only set disk_iops_read_write, disk_mbps_read_write for UltraSSD_LRS and
+  # PremiumV2_LRS disk types, as other types do not support these properties.
+  disk_iops_read_write                 = contains(["UltraSSD_LRS", "PremiumV2_LRS"], local.anydb_disks[count.index].storage_account_type) ? (
                                             local.anydb_disks[count.index].disk_iops_read_write) : (
                                             null
                                           )
-  disk_mbps_read_write                 = "UltraSSD_LRS" == local.anydb_disks[count.index].storage_account_type ? (
+  disk_mbps_read_write                 = contains(["UltraSSD_LRS", "PremiumV2_LRS"], local.anydb_disks[count.index].storage_account_type) ? (
                                             local.anydb_disks[count.index].disk_mbps_read_write) : (
                                             null
                                           )
 
-  zone                                 = local.zonal_deployment && !var.database.use_avset ? (
-                                           upper(local.anydb_ostype) == "LINUX" ? (
-                                             azurerm_linux_virtual_machine.dbserver[local.anydb_disks[count.index].vm_index].zone) : (
-                                             azurerm_windows_virtual_machine.dbserver[local.anydb_disks[count.index].vm_index].zone
-                                         )) : (
-                                           null
+  logical_sector_size                 = contains(["UltraSSD_LRS", "PremiumV2_LRS"], local.anydb_disks[count.index].storage_account_type) ? (
+                                            local.anydb_disks[count.index].logical_sector_size) : (
+                                            null
+                                          )
+
+
+  zone                                 = local.is_anydb_backup_disk_with_zrs[count.index] ? null : (
+                                           local.zonal_deployment && !var.database.use_avset ? (
+                                             upper(local.anydb_ostype) == "LINUX" ? (
+                                               azurerm_linux_virtual_machine.dbserver[local.anydb_disks[count.index].vm_index].zone
+                                             ) : (
+                                               azurerm_windows_virtual_machine.dbserver[local.anydb_disks[count.index].vm_index].zone
+                                             )
+                                           ) : null
                                          )
 
   tags                                 = var.tags
@@ -453,55 +479,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "vm_disks" {
 
 }
 
-
 # VM Extension
-resource "azurerm_virtual_machine_extension" "anydb_lnx_aem_extension" {
-  provider                             = azurerm.main
-  count                                = local.enable_deployment && var.database.deploy_v1_monitoring_extension ? (
-                                           upper(local.anydb_ostype) == "LINUX" ? (
-                                             var.database_server_count) : (
-                                             0
-                                           )) : (
-                                           0
-                                         )
-  depends_on                           = [azurerm_virtual_machine_data_disk_attachment.vm_disks]
-  name                                 = "MonitorX64Linux"
-  virtual_machine_id                   = azurerm_linux_virtual_machine.dbserver[count.index].id
-  publisher                            = "Microsoft.AzureCAT.AzureEnhancedMonitoring"
-  type                                 = "MonitorX64Linux"
-  type_handler_version                 = "1.0"
-  settings                             = jsonencode(
-                                           {
-                                             "system": "SAP",
-                                           }
-                                         )
-  tags                                 = var.tags
-}
-
-
-resource "azurerm_virtual_machine_extension" "anydb_win_aem_extension" {
-  provider                             = azurerm.main
-  count                                = local.enable_deployment && var.database.deploy_v1_monitoring_extension ? (
-                                           upper(local.anydb_ostype) == "WINDOWS" ? (
-                                             var.database_server_count) : (
-                                             0
-                                           )) : (
-                                           0
-                                         )
-  depends_on                           = [azurerm_virtual_machine_data_disk_attachment.vm_disks]
-  name                                 = "MonitorX64Windows"
-  virtual_machine_id                   = azurerm_windows_virtual_machine.dbserver[count.index].id
-  publisher                            = "Microsoft.AzureCAT.AzureEnhancedMonitoring"
-  type                                 = "MonitorX64Windows"
-  type_handler_version                 = "1.0"
-  settings                             = jsonencode(
-                                           {
-                                             "system": "SAP",
-                                           }
-                                         )
-  tags                                 = var.tags
-}
-
 
 #######################################4#######################################8
 #                                                                              #

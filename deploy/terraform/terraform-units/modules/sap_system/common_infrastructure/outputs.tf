@@ -100,30 +100,28 @@ output "network_resource_group" {
 
 output "admin_subnet" {
                                                    description = "Admin subnet object"
-                                                   value       = local.enable_admin_subnet ? (
-                                                                   local.admin_subnet_exists ? data.azurerm_subnet.admin[0] : azurerm_subnet.admin[0]) : (
-                                                                   null
-                                                                 )
+                                                   value       = var.infrastructure.virtual_networks.sap.subnet_admin.exists || var.infrastructure.virtual_networks.sap.subnet_admin.exists_in_workload ? (
+                                                                   data.azurerm_subnet.admin[0]) : (
+                                                                   var.infrastructure.virtual_networks.sap.subnet_admin.defined ? azurerm_subnet.admin[0] : null
+                                                                  )
                                                  }
 
 output "subnet_cidr_client"                    {
-                                                   description = "Storage subnet prefix"
-                                                   value       = local.enable_db_deployment && local.enable_admin_subnet ? (
-                                                                   local.admin_subnet_exists ? (
-                                                                     data.azurerm_subnet.admin[0].address_prefixes[0]) : (
-                                                                     azurerm_subnet.admin[0].address_prefixes[0]
-                                                                   )) : (
-                                                                   ""
-                                                                 )
+                                                   description = "Admin Storage subnet prefix"
+                                                   value       = var.infrastructure.virtual_networks.sap.subnet_admin.exists || var.infrastructure.virtual_networks.sap.subnet_admin.exists_in_workload ? (
+                                                                   data.azurerm_subnet.admin[0].address_prefixes[0]) : (
+                                                                   var.infrastructure.virtual_networks.sap.subnet_admin.defined ? azurerm_subnet.admin[0].address_prefixes[0] : null
+                                                                  )
+
                                                  }
 
 
 output "subnet_cidr_db"                        {
                                                    description = "DB subnet prefix"
                                                    value       = local.enable_db_deployment ? (
-                                                                   local.database_subnet_exists ? (
-                                                                      data.azurerm_subnet.db[0].address_prefixes[0]) : (
-                                                                      azurerm_subnet.db[0].address_prefixes[0]
+                                                                   var.infrastructure.virtual_networks.sap.subnet_db.defined ? (
+                                                                      azurerm_subnet.db[0].address_prefixes[0]) : (
+                                                                      data.azurerm_subnet.db[0].address_prefixes[0]
                                                                     )) : (
                                                                    ""
                                                                  )
@@ -132,43 +130,61 @@ output "subnet_cidr_db"                        {
 
 
 output "db_subnet"                               {
-                                                   description = "Admin subnet object"
-                                                   value       = local.database_subnet_exists ? (
-                                                                   data.azurerm_subnet.db[0]) : (
-                                                                   azurerm_subnet.db[0]
+                                                   description = "Database subnet object"
+                                                   value       = var.infrastructure.virtual_networks.sap.subnet_db.defined ? (
+                                                                   azurerm_subnet.db[0]) : (
+                                                                   data.azurerm_subnet.db[0]
                                                                  )
                                                  }
 
 output "db_subnet_netmask"                       {
                                                    description = "Database subnet netmask"
                                                    value       = local.enable_db_deployment ? (
-                                                                   local.database_subnet_exists ? (
-                                                                     split("/", data.azurerm_subnet.db[0].address_prefixes[0])[1]) : (
-                                                                     split("/", azurerm_subnet.db[0].address_prefixes[0])[1]
+                                                                   var.infrastructure.virtual_networks.sap.subnet_db.defined ? (
+                                                                     split("/", azurerm_subnet.db[0].address_prefixes[0])[1]) : (
+                                                                     split("/", data.azurerm_subnet.db[0].address_prefixes[0])[1]
                                                                    )) : (
                                                                    null
                                                                  )
                                                  }
-output "storage_subnet"                          {
+output "storage_subnet_id"                       {
                                                    description = "Storage subnet"
-                                                   value       = local.enable_db_deployment && local.enable_storage_subnet ? (
-                                                                   local.sub_storage_exists ? (
-                                                                     data.azurerm_subnet.storage[0]) : (
-                                                                     azurerm_subnet.storage[0]
-                                                                   )) : (
-                                                                   null
-                                                                 )
+                                                   value       = (var.infrastructure.virtual_networks.sap.subnet_storage.exists || var.infrastructure.virtual_networks.sap.subnet_storage.exists_in_workload) ?(
+                                                                     data.azurerm_subnet.storage[0].id) : (
+                                                                     var.infrastructure.virtual_networks.sap.subnet_storage.defined ? (
+                                                                       try(azurerm_subnet.storage[0].id, "")) : (
+                                                                       ""
+                                                                     )
+                                                                  )
+
                                                  }
 
 output "subnet_cidr_storage"                   {
                                                    description = "Storage subnet prefix"
-                                                   value       = local.enable_db_deployment && local.enable_storage_subnet ? (
-                                                                   local.sub_storage_exists ? (
+                                                   value       = (var.infrastructure.virtual_networks.sap.subnet_storage.exists || var.infrastructure.virtual_networks.sap.subnet_storage.exists_in_workload) ?(
                                                                      data.azurerm_subnet.storage[0].address_prefixes[0]) : (
-                                                                     azurerm_subnet.storage[0].address_prefixes[0]
-                                                                   )) : (
-                                                                   ""
-                                                                 )
+                                                                     var.infrastructure.virtual_networks.sap.subnet_storage.defined ? (
+                                                                       try(azurerm_subnet.storage[0].address_prefixes[0], "")) : (
+                                                                       ""
+                                                                     )
+                                                                   )
+                                                 }
+
+output "admin_tier_resource_creation_counts"     {
+                                                   description = "Cardinality (creation count) of admin-tier network resources for terraform test diagnostics. 1 = created (greenfield), 0 = looked up (brownfield)."
+                                                   value = {
+                                                     subnet = length(azurerm_subnet.admin)
+                                                     nsg    = length(azurerm_network_security_group.admin)
+                                                   }
+                                                 }
+
+output "database_tier_resource_creation_counts"  {
+                                                   description = "Cardinality (creation count) of database/storage-tier network resources for terraform test diagnostics. Storage tier has no dedicated NSG resource."
+                                                   value = {
+                                                     database_subnet = length(azurerm_subnet.db)
+                                                     database_nsg    = length(azurerm_network_security_group.db)
+                                                     storage_subnet  = length(azurerm_subnet.storage)
+                                                   }
                                                  }
 
 output "route_table_id"                          {
@@ -237,7 +253,7 @@ output "cloudinit_growpart_config"               {
 
 output "sapmnt_path"                             {
                                                    description = "Defines the sapmnt mount path"
-                                                   value       = var.NFS_provider == "AFS" ? (
+                                                   value       = var.application_tier.use_AFS_for_sapmnt && var.application_tier.enable_deployment ? (
                                                                    format("%s:/%s/%s",
                                                                      length(var.sapmnt_private_endpoint_id) == 0 ? (
                                                                        try(azurerm_private_endpoint.sapmnt[0].private_dns_zone_configs[0].record_sets[0].fqdn,
@@ -255,14 +271,14 @@ output "sapmnt_path"                             {
                                                                    ) : (
                                                                    var.NFS_provider == "ANF" ? (
                                                                      format("%s:/%s",
-                                                                       var.hana_ANF_volumes.use_existing_sapmnt_volume ? (
+                                                                       try(var.hana_ANF_volumes.use_existing_sapmnt_volume ? (
                                                                          data.azurerm_netapp_volume.sapmnt[0].mount_ip_addresses[0]) : (
                                                                          azurerm_netapp_volume.sapmnt[0].mount_ip_addresses[0]
-                                                                       ),
-                                                                       var.hana_ANF_volumes.use_existing_sapmnt_volume ? (
+                                                                       ), ""),
+                                                                       try(var.hana_ANF_volumes.use_existing_sapmnt_volume ? (
                                                                          data.azurerm_netapp_volume.sapmnt[0].volume_path) : (
                                                                          azurerm_netapp_volume.sapmnt[0].volume_path
-                                                                       )
+                                                                       ), "") 
                                                                      )
                                                                      ) : (
                                                                      ""
@@ -272,7 +288,7 @@ output "sapmnt_path"                             {
 
 output "sapmnt_path_secondary"                   {
                                                    description = "Defines the sapmnt mount path"
-                                                   value       = var.NFS_provider == "ANF" && var.hana_ANF_volumes.sapmnt_use_clone_in_secondary_zone ? (
+                                                   value       = var.NFS_provider == "ANF" && var.application_tier.enable_deployment && var.hana_ANF_volumes.sapmnt_use_clone_in_secondary_zone ? (
                                                                    format("%s:/%s",
                                                                      azurerm_netapp_volume.sapmnt_secondary[0].mount_ip_addresses[0],
                                                                      azurerm_netapp_volume.sapmnt_secondary[0].volume_path
@@ -284,7 +300,7 @@ output "sapmnt_path_secondary"                   {
 
 output "usrsap_path"                             {
                                                    description = "Defines the /usr/sap mount path (if used)"
-                                                   value       = var.NFS_provider == "ANF" && var.hana_ANF_volumes.use_for_usr_sap ? (
+                                                   value       = var.NFS_provider == "ANF" && var.application_tier.enable_deployment && var.hana_ANF_volumes.use_for_usr_sap ? (
                                                                    format("%s:/%s",
                                                                      var.hana_ANF_volumes.use_existing_usr_sap_volume ? (
                                                                        data.azurerm_netapp_volume.usrsap[0].mount_ip_addresses[0]) : (
@@ -299,6 +315,11 @@ output "usrsap_path"                             {
                                                                    ""
                                                                  )
 
+                                                 }
+
+output "use_AFS_encryption_in_transit"           {
+                                                   description = "Indicates if Encryption in transit is enabled for AFS shares"
+                                                   value       = local.use_AFS_encryption_in_transit
                                                  }
 
 ###############################################################################
@@ -322,7 +343,7 @@ output "anchor_vm"                               {
 
 output "scale_set_id"                            {
                                                    description = "Defines the Scaleset ID"
-                                                   value       = var.use_scalesets_for_deployment ? (
+                                                   value       = var.use_scalesets_for_deployment && var.application_tier.enable_deployment ? (
                                                                    length(var.scaleset_id) > 0 ? (
                                                                      var.scaleset_id): (
                                                                      azurerm_orchestrated_virtual_machine_scale_set.scale_set[0].id)

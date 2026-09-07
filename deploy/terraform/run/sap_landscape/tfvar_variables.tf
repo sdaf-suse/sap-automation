@@ -3,7 +3,7 @@
 
 #######################################4#######################################8
 #                                                                              #
-#                           Environment definitioms                            #
+#                           Environment definitions                            #
 #                                                                              #
 #######################################4#######################################8
 
@@ -12,6 +12,10 @@ variable "environment"                          {
                                                   description = "This is the environment name for the deployment"
                                                   type        = string
                                                   default     = ""
+                                                  validation {
+                                                     condition     = length(var.environment) <= 5 && length(var.environment) > 0
+                                                     error_message = "The 'environment' variable must be specified and at most 5 characters long."
+                                                   }
                                                 }
 
 variable "codename"                             {
@@ -53,23 +57,32 @@ variable "Description"                          {
                                                   default     = ""
                                                 }
 
-
 variable "subscription_id"                      {
                                                   description = "This is the target subscription for the deployment"
                                                   type        = string
-                                                  default     = ""
+                                                   validation {
+                                                     condition     = length(var.subscription_id) == 0 ? true : length(var.subscription_id) == 36
+                                                     error_message = "If specified the 'subscription_id' variable must be a correct subscription ID."
+                                                   }
+
                                                 }
-
-
-variable "management_subscription"              {
+variable "management_subscription_id"           {
                                                   description = "This is the management subscription used by the deployment"
                                                   type        = string
                                                   default     = ""
+                                                  validation {
+                                                    condition     = length(var.management_subscription_id) == 0 ? true : length(var.management_subscription_id) == 36
+                                                    error_message = "If specified the 'management_subscription_id' variable must be a correct subscription ID."
+                                                  }
                                                 }
 
+variable "use_deployer"                          {
+                                                   description = "Use deployer to deploy the resources"
+                                                   default     = true
+                                                 }
 #######################################4#######################################8
 #                                                                              #
-#                          Resource group definitioms                          #
+#                          Resource group definitions                          #
 #                                                                              #
 #######################################4#######################################8
 
@@ -81,6 +94,11 @@ variable "resourcegroup_name"                   {
 variable "resourcegroup_arm_id"                 {
                                                   description = "If provided, the Azure resource group id"
                                                   default     = ""
+                                                  validation {
+                                                    condition     = length(var.resourcegroup_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.resourcegroup_arm_id))
+                                                    error_message = "If specified the 'resourcegroup_arm_id' variable must be a correct Azure resource identifier."
+                                                  }
+
                                                 }
 
 variable "resourcegroup_tags"                   {
@@ -107,12 +125,18 @@ variable "network_logical_name"                 {
 
 variable "network_address_space"                {
                                                   description = "The address space of the virtual network"
-                                                  default     = ""
+                                                  default     = [""]
+                                                  type        = list(string)
                                                 }
 
 variable "network_arm_id"                       {
                                                   description = "If provided, the Azure resource id of the virtual network"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.network_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.network_arm_id))
+                                                                  error_message = "If specified the 'network_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
+
                                                 }
 
 variable "network_flow_timeout_in_minutes"      {
@@ -135,8 +159,18 @@ variable "network_enable_route_propagation"     {
 
 variable "use_private_endpoint"                 {
                                                   description = "Boolean value indicating if private endpoint should be used for the deployment"
-                                                  default     = false
+                                                  default     = true
                                                   type        = bool
+                                                }
+
+variable "private_endpoint_network_policies"    {
+                                                  description = "Controls network policy support for private endpoints on workload zone subnets"
+                                                  default     = "Enabled"
+                                                  type        = string
+                                                  validation {
+                                                    condition     = contains(["Disabled", "Enabled", "NetworkSecurityGroupEnabled", "RouteTableEnabled"], var.private_endpoint_network_policies)
+                                                    error_message = "The private_endpoint_network_policies value must be Disabled, Enabled, NetworkSecurityGroupEnabled, or RouteTableEnabled."
+                                                  }
                                                 }
 
 variable "use_service_endpoint"                 {
@@ -152,13 +186,13 @@ variable "enable_firewall_for_keyvaults_and_storage" {
                                                      }
 
 variable "public_network_access_enabled"        {
-                                                  description = "Defines if the public access should be enabled for keyvaults and storage accounts"
-                                                  default     = true
+                                                  description = "Defines if the public access should be enabled for key vaults and storage accounts"
+                                                  default     = false
                                                   type        = bool
                                                 }
 
 variable "peer_with_control_plane_vnet"         {
-                                                  description = "Defines in the SAP VNet will be peered with the controlplane VNet"
+                                                  description = "Defines in the SAP VNet will be peered with the control plane VNet"
                                                   type        = bool
                                                   default     = true
                                                 }
@@ -183,6 +217,11 @@ variable "admin_subnet_name"                    {
 variable "admin_subnet_arm_id"                  {
                                                   description = "If provided, Azure resource id for the admin subnet"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.admin_subnet_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.admin_subnet_arm_id))
+                                                                  error_message = "If specified the 'admin_subnet_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
+
                                                 }
 
 variable "admin_subnet_nsg_name"                {
@@ -193,6 +232,10 @@ variable "admin_subnet_nsg_name"                {
 variable "admin_subnet_nsg_arm_id"              {
                                                   description = "If provided, Azure resource id for the admin subnet NSG"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.admin_subnet_nsg_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.admin_subnet_nsg_arm_id))
+                                                                  error_message = "If specified the 'admin_subnet_nsg_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 
@@ -210,6 +253,10 @@ variable "db_subnet_name"                       {
 variable "db_subnet_arm_id"                     {
                                                   description = "If provided, Azure resource id for the db subnet"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.db_subnet_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.db_subnet_arm_id))
+                                                                  error_message = "If specified the 'db_subnet_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "db_subnet_address_prefix"             {
@@ -225,6 +272,10 @@ variable "db_subnet_nsg_name"                   {
 variable "db_subnet_nsg_arm_id"                 {
                                                   description = "If provided, Azure resource id for the db subnet NSG"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.db_subnet_nsg_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.db_subnet_nsg_arm_id))
+                                                                  error_message = "If specified the 'db_subnet_nsg_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 
@@ -242,6 +293,10 @@ variable "app_subnet_name"                      {
 variable "app_subnet_arm_id"                    {
                                                   description = "If provided, Azure resource id for the app subnet"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.app_subnet_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.app_subnet_arm_id))
+                                                                  error_message = "If specified the 'app_subnet_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "app_subnet_address_prefix"            {
@@ -257,6 +312,10 @@ variable "app_subnet_nsg_name"                  {
 variable "app_subnet_nsg_arm_id"                {
                                                   description = "If provided, Azure resource id for the app subnet NSG"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.app_subnet_nsg_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.app_subnet_nsg_arm_id))
+                                                                  error_message = "If specified the 'app_subnet_nsg_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 
@@ -274,6 +333,10 @@ variable "web_subnet_name"                      {
 variable "web_subnet_arm_id"                    {
                                                   description = "If provided, Azure resource id for the web subnet"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.web_subnet_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.web_subnet_arm_id))
+                                                                  error_message = "If specified the 'web_subnet_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "web_subnet_address_prefix"            {
@@ -289,6 +352,10 @@ variable "web_subnet_nsg_name"                  {
 variable "web_subnet_nsg_arm_id"                {
                                                   description = "If provided, Azure resource id for the web subnet NSG"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.web_subnet_nsg_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.web_subnet_nsg_arm_id))
+                                                                  error_message = "If specified the 'web_subnet_nsg_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 #########################################################################################
@@ -300,6 +367,14 @@ variable "web_subnet_nsg_arm_id"                {
 variable "use_separate_storage_subnet"          {
                                                   description = "Boolean to use a separate subnet"
                                                   default     = false
+                                                  type        = bool
+                                                  validation {
+                                                    condition = !var.use_separate_storage_subnet || (
+                                                      length(trimspace(var.storage_subnet_arm_id)) > 0 ||
+                                                      length(trimspace(var.storage_subnet_address_prefix)) > 0
+                                                    )
+                                                    error_message = "When use_separate_storage_subnet is true, storage_subnet_arm_id or storage_subnet_address_prefix must be specified."
+                                                  }
                                                 }
 
 variable "storage_subnet_name"                  {
@@ -310,6 +385,10 @@ variable "storage_subnet_name"                  {
 variable "storage_subnet_arm_id"                {
                                                   description = "If provided, Azure resource id for the storage subnet"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.storage_subnet_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.storage_subnet_arm_id))
+                                                                  error_message = "If specified the 'storage_subnet_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "storage_subnet_address_prefix"        {
@@ -325,6 +404,10 @@ variable "storage_subnet_nsg_name"              {
 variable "storage_subnet_nsg_arm_id"            {
                                                   description = "If provided, Azure resource id for the storage subnet NSG"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.storage_subnet_nsg_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.storage_subnet_nsg_arm_id))
+                                                                  error_message = "If specified the 'storage_subnet_nsg_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 
@@ -342,6 +425,10 @@ variable "anf_subnet_name"                      {
 variable "anf_subnet_arm_id"                    {
                                                   description = "If provided, Azure resource id for the ANF subnet"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.anf_subnet_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.anf_subnet_arm_id))
+                                                                  error_message = "If specified the 'anf_subnet_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "anf_subnet_address_prefix"            {
@@ -357,6 +444,10 @@ variable "anf_subnet_nsg_name"                  {
 variable "anf_subnet_nsg_arm_id"                {
                                                   description = "If provided, Azure resource id for the ANF subnet NSG"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.anf_subnet_nsg_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.anf_subnet_nsg_arm_id))
+                                                                  error_message = "If specified the 'anf_subnet_nsg_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 
@@ -374,6 +465,10 @@ variable "ams_subnet_name"                       {
 variable "ams_subnet_arm_id"                     {
                                                   description = "If provided, Azure resource id for the ams subnet"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.ams_subnet_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.ams_subnet_arm_id))
+                                                                  error_message = "If specified the 'ams_subnet_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "ams_subnet_address_prefix"             {
@@ -389,6 +484,10 @@ variable "ams_subnet_nsg_name"                  {
 variable "ams_subnet_nsg_arm_id"                {
                                                   description = "If provided, Azure resource id for the AMS subnet NSG"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.ams_subnet_nsg_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.ams_subnet_nsg_arm_id))
+                                                                  error_message = "If specified the 'ams_subnet_nsg_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 #########################################################################################
@@ -400,11 +499,19 @@ variable "ams_subnet_nsg_arm_id"                {
 variable "user_keyvault_id"                     {
                                                   description = "If provided, the Azure resource identifier of the credentials keyvault"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.user_keyvault_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.user_keyvault_id))
+                                                                  error_message = "If specified the 'user_keyvault_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "spn_keyvault_id"                      {
                                                   description = "If provided, the Azure resource identifier of the deployment credential keyvault"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.spn_keyvault_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.spn_keyvault_id))
+                                                                  error_message = "If specified the 'spn_keyvault_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "enable_purge_control_for_keyvaults"   {
@@ -415,7 +522,7 @@ variable "enable_purge_control_for_keyvaults"   {
 
 variable "enable_rbac_authorization_for_keyvault" {
                                                     description = "Enables RBAC authorization for Azure keyvault"
-                                                    default     = false
+                                                    default     = true
                                                   }
 
 variable "additional_users_to_add_to_keyvault_policies" {
@@ -426,6 +533,10 @@ variable "additional_users_to_add_to_keyvault_policies" {
 variable "keyvault_private_endpoint_id"         {
                                                   description = "Existing private endpoint for key vault"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.keyvault_private_endpoint_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.keyvault_private_endpoint_id))
+                                                                  error_message = "If specified the 'keyvault_private_endpoint_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "soft_delete_retention_days"           {
@@ -438,6 +549,26 @@ variable "set_secret_expiry"                    {
                                                   default     = false
                                                   type        = bool
                                                 }
+
+variable "workload_zone_private_key_secret_name"     {
+                                                        description = "Defines the name of the secret in the Azure Key Vault that contains the private key"
+                                                        default     = ""
+                                                      }
+variable "workload_zone_public_key_secret_name"       {
+                                                        description = "Defines the name of the secret in the Azure Key Vault that contains the public key"
+                                                        default     = ""
+                                                      }
+
+variable "workload_zone_username_secret_name"         {
+                                                        description = "Defines the name of the secret in the Azure Key Vault that contains the user name"
+                                                        default     = ""
+                                                      }
+
+variable "workload_zone_password_secret_name"        {
+                                                        description = "Defines the name of the secret in the Azure Key Vault that contains the password"
+                                                        default     = ""
+                                                      }
+
 
 #########################################################################################
 #                                                                                       #
@@ -473,6 +604,10 @@ variable "use_spn"                              {
 variable "user_assigned_identity_id"            {
                                                   description = "If provided defines the user assigned identity to assign to the virtual machines"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.user_assigned_identity_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.user_assigned_identity_id))
+                                                                  error_message = "If specified the 'user_assigned_identity_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "deploy_monitoring_extension"          {
@@ -495,11 +630,20 @@ variable "deploy_defender_extension"            {
 variable "diagnostics_storage_account_arm_id"   {
                                                   description = "If provided, Azure resource id for the diagnostics storage account"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.diagnostics_storage_account_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.diagnostics_storage_account_arm_id))
+                                                                  error_message = "If specified the 'diagnostics_storage_account_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
+
                                                 }
 
 variable "witness_storage_account_arm_id"       {
                                                   description = "If provided, Azure resource id for the witness storage account"
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.witness_storage_account_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.witness_storage_account_arm_id))
+                                                                  error_message = "If specified the 'witness_storage_account_arm_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "create_transport_storage"             {
@@ -512,12 +656,21 @@ variable "transport_storage_account_id"         {
                                                   description = "Azure Resource Identifier for the Transport media storage account"
                                                   type        = string
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.transport_storage_account_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.transport_storage_account_id))
+                                                                  error_message = "If specified the 'transport_storage_account_id' variable must be a correct Azure resource identifier."
+                                                                }
+
                                                 }
 
 variable "transport_private_endpoint_id"        {
                                                   description = "Azure Resource Identifier for an private endpoint connection"
                                                   type        = string
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.transport_private_endpoint_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.transport_private_endpoint_id))
+                                                                  error_message = "If specified the 'transport_private_endpoint_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "transport_volume_size"                {
@@ -529,6 +682,10 @@ variable "install_storage_account_id"           {
                                                   description = "Azure Resource Identifier for the Installation media storage account"
                                                   type        = string
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.install_storage_account_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.install_storage_account_id))
+                                                                  error_message = "If specified the 'install_storage_account_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "install_volume_size"                  {
@@ -540,6 +697,10 @@ variable "install_private_endpoint_id"          {
                                                   description = "Azure Resource Identifier for an private endpoint connection"
                                                   type        = string
                                                   default     = ""
+                                                  validation    {
+                                                                  condition     = length(var.install_private_endpoint_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.install_private_endpoint_id))
+                                                                  error_message = "If specified the 'install_private_endpoint_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                 }
 
 variable "install_always_create_fileshares"     {
@@ -585,6 +746,11 @@ variable "management_dns_subscription_id"          {
                                                      description = "String value giving the possibility to register custom dns a records in a separate subscription"
                                                      default     = ""
                                                      type        = string
+
+                                                      validation {
+                                                        condition     = length(var.management_dns_subscription_id) == 0 ? true : length(var.management_dns_subscription_id) == 36
+                                                        error_message = "If specified the 'management_dns_subscription_id' variable must be a correct subscription ID."
+                                                      }
                                                    }
 
 variable "management_dns_resourcegroup_name"       {
@@ -597,6 +763,11 @@ variable "privatelink_dns_subscription_id"         {
                                                      description = "String value giving the possibility to register custom PrivateLink DNS A records in a separate subscription"
                                                      default     = ""
                                                      type        = string
+
+                                                     validation {
+                                                       condition     = length(var.privatelink_dns_subscription_id) == 0 ? true : length(var.privatelink_dns_subscription_id) == 36
+                                                       error_message = "If specified the 'privatelink_dns_subscription_id' variable must be a correct subscription ID."
+                                                     }
                                                    }
 
 variable "privatelink_dns_resourcegroup_name"      {
@@ -605,21 +776,32 @@ variable "privatelink_dns_resourcegroup_name"      {
                                                      type        = string
                                                    }
 
-
 variable "privatelink_file_id"                     {
                                                      description = "ID of the private link file resource"
                                                      default = ""
                                                      type = string
+                                                    validation    {
+                                                                  condition     = length(var.privatelink_file_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.privatelink_file_id))
+                                                                  error_message = "If specified the 'privatelink_file_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                    }
 variable "privatelink_storage_id"                  {
                                                      description = "ID of the private link storage resource"
                                                      default = ""
                                                      type = string
+                                                    validation    {
+                                                                  condition     = length(var.privatelink_storage_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.privatelink_storage_id))
+                                                                  error_message = "If specified the 'privatelink_storage_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                    }
 variable "privatelink_keyvault_id"                 {
                                                      description = "ID of the private link keyvault resource"
                                                      default = ""
                                                      type = string
+                                                     validation    {
+                                                                  condition     = length(var.privatelink_keyvault_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.privatelink_keyvault_id))
+                                                                  error_message = "If specified the 'privatelink_keyvault_id' variable must be a correct Azure resource identifier."
+                                                                }
                                                    }
 
 variable "dns_server_list"                         {
@@ -639,10 +821,11 @@ variable "dns_zone_names"                          {
                                                      type        = map(string)
 
                                                      default = {
-                                                                "file_dns_zone_name"   = "privatelink.file.core.windows.net"
-                                                                "blob_dns_zone_name"   = "privatelink.blob.core.windows.net"
-                                                                "table_dns_zone_name"  = "privatelink.table.core.windows.net"
-                                                                "vault_dns_zone_name"  = "privatelink.vaultcore.azure.net"
+                                                                  "file_dns_zone_name"      = "privatelink.file.core.windows.net"
+                                                                  "blob_dns_zone_name"      = "privatelink.blob.core.windows.net"
+                                                                  "table_dns_zone_name"     = "privatelink.table.core.windows.net"
+                                                                  "vault_dns_zone_name"     = "privatelink.vaultcore.azure.net"
+                                                                  "appconfig_dns_zone_name" = "privatelink.azconfig.io"
                                                                }
                                                    }
 
@@ -658,6 +841,24 @@ variable "register_storage_accounts_keyvaults_with_dns" {
                                                      type        = bool
                                                    }
 
+variable "shared_access_key_enabled"            {
+                                                  description = "Indicates whether the storage account permits requests to be authorized with the account access key via Shared Key."
+                                                  default     = false
+                                                  type        = bool
+                                                }
+
+variable "shared_access_key_enabled_nfs"        {
+                                                  description = "Indicates whether the storage account permits requests to be authorized with the account access key via Shared Key."
+                                                  default     = false
+                                                  type        = bool
+                                                }
+
+variable "data_plane_available"                 {
+                                                  description = "Boolean value indicating if storage account access is via data plane"
+                                                  default     = true
+                                                  type        = bool
+                                                }
+
 
 #########################################################################################
 #                                                                                       #
@@ -668,6 +869,10 @@ variable "register_storage_accounts_keyvaults_with_dns" {
 variable "ANF_account_arm_id"                      {
                                                      description = "If provided, The resource identifier for the NetApp account"
                                                      default     = ""
+                                                      validation    {
+                                                                      condition     = length(var.ANF_account_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.ANF_account_arm_id))
+                                                                      error_message = "If specified the 'ANF_account_arm_id' variable must be a correct Azure resource identifier."
+                                                                    }
                                                    }
 
 variable "ANF_account_name"                        {
@@ -751,9 +956,22 @@ variable "ANF_install_volume_zone"                 {
                                                      default     = [""]
                                                    }
 
+variable "ANF_export_policy_client_access_list"     {
+                                                     description = "If defined, specifies the allowed client list for ANF export policy"
+                                                     type        = list(string)
+                                                     default     = []
+                                                   }
+
 variable "use_AFS_for_shared_storage"              {
                                                      description = "If true, will use AFS for all shared storage."
-                                                     default = false
+                                                     type        = bool
+                                                     default     = false
+                                                   }
+
+variable "AFS_enable_encryption_in_transit"        {
+                                                     description = "Enable encryption in transit for Azure Files"
+                                                     type        = bool
+                                                     default     = false
                                                    }
 
 #########################################################################################
@@ -770,6 +988,11 @@ variable "iscsi_subnet_name"                       {
 variable "iscsi_subnet_arm_id"                     {
                                                      description = "If provided, Azure resource id for the iSCSI subnet"
                                                      default     = ""
+                                                     validation    {
+                                                                     condition     = length(var.iscsi_subnet_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.iscsi_subnet_arm_id))
+                                                                     error_message = "If specified the 'iscsi_subnet_arm_id' variable must be a correct Azure resource identifier."
+                                                                   }
+
                                                    }
 
 variable "iscsi_subnet_address_prefix"             {
@@ -785,6 +1008,10 @@ variable "iscsi_subnet_nsg_name"                   {
 variable "iscsi_subnet_nsg_arm_id"                 {
                                                      description = "If provided, Azure resource id for the iSCSI subnet NSG"
                                                      default     = ""
+                                                      validation    {
+                                                                      condition     = length(var.iscsi_subnet_nsg_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.iscsi_subnet_nsg_arm_id))
+                                                                      error_message = "If specified the 'iscsi_subnet_nsg_arm_id' variable must be a correct Azure resource identifier."
+                                                                    }
                                                    }
 
 variable "iscsi_count"                             {
@@ -883,6 +1110,165 @@ variable "utility_vm_nic_ips"                      {
                                                      default     = []
                                                    }
 
+variable "utility_vm_zones"                        {
+                                                     description = "The zones for the utility virtual machines"
+                                                     type        = list(string)
+                                                     default     = []
+                                                   }
+
+#########################################################################################
+#                                                                                       #
+#  Utility Storage Accounts                                                             #
+#                                                                                       #
+#########################################################################################
+
+variable "utility_storage_accounts"                {
+                                                     description = "List of utility storage account configurations for the workload zone."
+                                                     type = list(object({
+                                                       name                     = optional(string, "")
+                                                       account_kind             = optional(string, "FileStorage")
+                                                       account_tier             = optional(string, "Premium")
+                                                       account_replication_type = optional(string, "LRS")
+                                                       file_shares = optional(list(object({
+                                                         name     = optional(string, "")
+                                                         quota    = optional(number, 128)
+                                                         protocol = optional(string, "NFS")
+                                                       })), [])
+                                                       blob_containers = optional(list(object({
+                                                         name = optional(string, "")
+                                                         immutability_policy = optional(object({
+                                                           immutability_period_in_days = optional(number, 30)
+                                                           locked                      = optional(bool, false)
+                                                           allow_irreversible_lock     = optional(bool, false)
+                                                           protected_append_writes     = optional(string, "none")
+                                                         }), null)
+                                                       })), [])
+                                                       versioning_enabled = optional(bool, false)
+                                                       version_level_immutability = optional(object({
+                                                         immutability_period_in_days   = optional(number, 30)
+                                                         state                         = optional(string, "Unlocked")
+                                                         allow_protected_append_writes = optional(bool, false)
+                                                         allow_irreversible_lock       = optional(bool, false)
+                                                       }), null)
+                                                     }))
+                                                     default     = []
+                                                     validation {
+                                                       condition = alltrue(flatten([
+                                                         for account in var.utility_storage_accounts : [
+                                                           for container in account.blob_containers :
+                                                           container.immutability_policy == null ? true : (
+                                                             container.immutability_policy.immutability_period_in_days >= 1 &&
+                                                             container.immutability_policy.immutability_period_in_days <= 146000
+                                                           )
+                                                         ]
+                                                       ]))
+                                                       error_message = "Each configured utility blob container immutability period must be between 1 and 146000 days."
+                                                     }
+                                                     validation {
+                                                       condition = alltrue(flatten([
+                                                         for account in var.utility_storage_accounts : [
+                                                           for container in account.blob_containers :
+                                                           container.immutability_policy == null ? true : contains(
+                                                             ["none", "append_blobs", "all"],
+                                                             container.immutability_policy.protected_append_writes
+                                                           )
+                                                         ]
+                                                       ]))
+                                                       error_message = "Each configured utility blob container protected append mode must be none, append_blobs, or all."
+                                                     }
+                                                     validation {
+                                                       condition = alltrue(flatten([
+                                                         for account in var.utility_storage_accounts : [
+                                                           for container in account.blob_containers :
+                                                           container.immutability_policy == null ? true : (
+                                                             !container.immutability_policy.locked ||
+                                                             container.immutability_policy.allow_irreversible_lock
+                                                           )
+                                                         ]
+                                                       ]))
+                                                       error_message = "A locked utility blob container immutability policy requires allow_irreversible_lock to be true. Locking is irreversible: Azure never permits deleting a locked time-based retention policy, so terraform destroy for the container, the storage account and the workload zone is blocked permanently, not just until retention expires. Teardown then requires an out-of-band procedure."
+                                                     }
+                                                     validation {
+                                                       condition = alltrue(flatten([
+                                                         for account in var.utility_storage_accounts : [
+                                                           for container in account.blob_containers :
+                                                           container.immutability_policy == null ? true : (
+                                                             length(trimspace(account.name)) > 0 &&
+                                                             length(trimspace(container.name)) > 0
+                                                           )
+                                                         ]
+                                                       ]))
+                                                       error_message = "Utility storage accounts and blob containers with an immutability policy must have explicit non-empty names."
+                                                     }
+                                                     validation {
+                                                       condition = length(flatten([
+                                                         for account in var.utility_storage_accounts : [
+                                                           for container in account.blob_containers : "${account.name}/${container.name}"
+                                                           if container.immutability_policy != null
+                                                         ]
+                                                       ])) == length(distinct(flatten([
+                                                         for account in var.utility_storage_accounts : [
+                                                           for container in account.blob_containers : "${account.name}/${container.name}"
+                                                           if container.immutability_policy != null
+                                                         ]
+                                                       ])))
+                                                       error_message = "Utility blob containers with immutability policies must have unique account and container name pairs."
+                                                     }
+                                                     validation {
+                                                       condition = alltrue(flatten([
+                                                         for account in var.utility_storage_accounts : [
+                                                           for container in account.blob_containers :
+                                                           container.immutability_policy == null || account.account_kind != "FileStorage"
+                                                         ]
+                                                       ]))
+                                                       error_message = "Utility blob container immutability policies are not supported on FileStorage accounts; use a StorageV2 account for blob containers."
+                                                     }
+                                                     validation {
+                                                       condition = alltrue([
+                                                         for account in var.utility_storage_accounts :
+                                                         account.version_level_immutability == null || account.versioning_enabled
+                                                       ])
+                                                       error_message = "A utility storage account with version_level_immutability must also set versioning_enabled to true. Azure requires blob versioning before version-level immutability can be enabled."
+                                                     }
+                                                     validation {
+                                                       condition = alltrue([
+                                                         for account in var.utility_storage_accounts :
+                                                         !account.versioning_enabled || contains(["StorageV2", "BlockBlobStorage"], account.account_kind)
+                                                       ])
+                                                       error_message = "Blob versioning and version-level immutability are only supported on StorageV2 or BlockBlobStorage utility storage accounts; they are not available on FileStorage accounts."
+                                                     }
+                                                     validation {
+                                                       condition = alltrue([
+                                                         for account in var.utility_storage_accounts :
+                                                         account.version_level_immutability == null ? true : (
+                                                           account.version_level_immutability.immutability_period_in_days >= 1 &&
+                                                           account.version_level_immutability.immutability_period_in_days <= 146000
+                                                         )
+                                                       ])
+                                                       error_message = "Each configured utility storage account version-level immutability period must be between 1 and 146000 days."
+                                                     }
+                                                     validation {
+                                                       condition = alltrue([
+                                                         for account in var.utility_storage_accounts :
+                                                         account.version_level_immutability == null ? true : contains(
+                                                           ["Disabled", "Unlocked", "Locked"],
+                                                           account.version_level_immutability.state
+                                                         )
+                                                       ])
+                                                       error_message = "Each configured utility storage account version-level immutability state must be Disabled, Unlocked, or Locked."
+                                                     }
+                                                     validation {
+                                                       condition = alltrue([
+                                                         for account in var.utility_storage_accounts :
+                                                         account.version_level_immutability == null ? true : (
+                                                           account.version_level_immutability.state != "Locked" ||
+                                                           account.version_level_immutability.allow_irreversible_lock
+                                                         )
+                                                       ])
+                                                       error_message = "A Locked utility storage account version-level immutability policy requires allow_irreversible_lock to be true. Locking is irreversible: Azure never permits returning the account policy to Unlocked or Disabled, and the account cannot be deleted until every protected blob version is removed after its retention period."
+                                                     }
+                                                   }
+
 variable "patch_mode"                           {
                                                   description = "If defined, define the patch mode for the virtual machines"
                                                   default     = "ImageDefault"
@@ -941,6 +1327,11 @@ variable "ams_instance_name"                      {
 variable "ams_laws_arm_id"                        {
                                                     description = "If provided, Azure resource id for the Log analytics workspace in AMS"
                                                     default     = ""
+                                                    validation    {
+                                                                    condition     = length(var.ams_laws_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.ams_laws_arm_id))
+                                                                    error_message = "If specified the 'ams_laws_arm_id' variable must be a correct Azure resource identifier."
+                                                                  }
+
                                                   }
 
 #######################################4#######################################8
@@ -965,6 +1356,10 @@ variable "nat_gateway_arm_id"                     {
                                                     description = "If provided, Azure resource id for the NAT Gateway"
                                                     type        = string
                                                     default     = ""
+                                                    validation    {
+                                                                    condition     = length(var.nat_gateway_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.nat_gateway_arm_id))
+                                                                    error_message = "If specified the 'nat_gateway_arm_id' variable must be a correct Azure resource identifier."
+                                                                  }
                                                   }
 
 variable "nat_gateway_public_ip_zones"            {
@@ -977,6 +1372,10 @@ variable "nat_gateway_public_ip_arm_id"           {
                                                     description = "If provided, Azure resource id for the NAT Gateway public IP"
                                                     type        = string
                                                     default     = ""
+                                                    validation    {
+                                                                    condition     = length(var.nat_gateway_public_ip_arm_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.nat_gateway_public_ip_arm_id))
+                                                                    error_message = "If specified the 'nat_gateway_public_ip_arm_id' variable must be a correct Azure resource identifier."
+                                                                  }
                                                   }
 
 variable "nat_gateway_idle_timeout_in_minutes"    {
@@ -1000,11 +1399,10 @@ variable "nat_gateway_public_ip_tags"             {
 variable "tfstate_resource_id"                   {
                                                     description = "Resource id of tfstate storage account"
                                                     validation {
-                                                                  condition     = (
-                                                                                    length(split("/", var.tfstate_resource_id)) == 9
-                                                                                  )
-                                                                  error_message = "The Azure Resource ID for the storage account containing the Terraform state files must be provided and be in correct format."
-                                                                }
+                                                                condition = can(provider::azurerm::parse_resource_id(var.tfstate_resource_id)
+                                                                )
+                                                                error_message = "The Azure Resource ID for the storage account containing the Terraform state files must be provided and be in correct format."
+                                                              }
                                                   }
 
 variable "deployer_tfstate_key"                   {
@@ -1012,24 +1410,6 @@ variable "deployer_tfstate_key"                   {
                                                     type    = string
                                                     default = ""
                                                   }
-
-variable "shared_access_key_enabled"            {
-                                                  description = "Indicates whether the storage account permits requests to be authorized with the account access key via Shared Key."
-                                                  default     = false
-                                                  type        = bool
-                                                }
-
-variable "shared_access_key_enabled_nfs"        {
-                                                  description = "Indicates whether the storage account permits requests to be authorized with the account access key via Shared Key."
-                                                  default     = false
-                                                  type        = bool
-                                                }
-
-variable "data_plane_available"                 {
-                                                  description = "Boolean value indicating if storage account access is via data plane"
-                                                  default     = false
-                                                  type        = bool
-                                                }
 
 variable "custom_random_id"                     {
                                                   description = "If provided, the value of the custom random id"
@@ -1039,4 +1419,67 @@ variable "custom_random_id"                     {
 variable "additional_network_id"                {
                                                    description = "Agent Network resource ID"
                                                    default     = ""
+                                                   validation    {
+                                                                 condition     = length(var.additional_network_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.additional_network_id))
+                                                                 error_message = "If specified the 'additional_network_id' variable must be a correct Azure resource identifier."
+                                                               }
+
                                                  }
+
+variable "additional_subnet_id"                {
+                                                   description = "Agent subnet resource ID"
+                                                   default     = ""
+                                                   validation    {
+                                                                 condition     = length(var.additional_subnet_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.additional_subnet_id))
+                                                                 error_message = "If specified the 'additional_subnet_id' variable must be a correct Azure resource identifier."
+                                                               }
+
+                                                 }
+
+
+#######################################4#######################################8
+#                                                                              #
+#  Miscellaneous settings                                                      #
+#                                                                              #
+#######################################4#######################################8
+
+variable "assign_permissions"                         {
+                                                        description = "Boolean flag indicating if permissions should be assigned"
+                                                        default     = true
+                                                        type        = bool
+                                                      }
+
+variable "spn_id"                                     {
+                                                        description = "Service Principal Id to be used for the deployment"
+                                                        default     = ""
+                                                        validation {
+                                                          condition     = length(var.spn_id) == 0 ? true : length(var.spn_id) == 36
+                                                          error_message = "If specified the 'spn_id' variable must be a correct service principal ID."
+                                                        }
+                                                      }
+variable "platform_updates"                           {
+                                                        description = "Specifies whether VMAgent Platform Updates is enabled"
+                                                        default     = "true"
+                                                      }
+
+###############################################################################
+#                                                                             #
+#                            Application  configuration                       #
+#                                                                             #
+###############################################################################
+
+variable "application_configuration_id"         {
+                                                    description = "Defines the Azure application configuration Resource id"
+                                                    type        = string
+                                                    default     = ""
+                                                    validation    {
+                                                                  condition     = length(var.application_configuration_id) == 0 ? true : can(provider::azurerm::parse_resource_id(var.application_configuration_id))
+                                                                  error_message = "If specified the 'application_configuration_id' variable must be a correct Azure resource identifier."
+                                                                }
+
+                                                 }
+
+variable "control_plane_name"                   {
+                                                  description = "The name of the control plane"
+                                                  default     = ""
+                                                }

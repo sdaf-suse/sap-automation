@@ -26,8 +26,14 @@ output "environment"                   {
 #######################################4#######################################8
 
 output "automation_version"            {
-                                         description = "Defines the version of the terraform templates used in the deloyment"
+                                         description = "Defines the version of the terraform templates used in the deployment"
                                          value       = local.version_label
+                                       }
+
+
+output "workload_automation_version"   {
+                                         description = "Defines the version of the terraform templates used in the workload zone deployment"
+                                         value       = data.terraform_remote_state.landscape.outputs.automation_version
                                        }
 
 output "random_id"                     {
@@ -123,7 +129,7 @@ output "management_dns_subscription_id" {
                                         }
 output "management_dns_resourcegroup_name" {
                                              description = "Resource group name for DNS resource group"
-                                             value       = try(data.terraform_remote_state.landscape.outputs.management_dns_resourcegroup_name, local.saplib_resource_group_name)
+                                             value       = try(data.terraform_remote_state.landscape.outputs.management_dns_resourcegroup_name, local.tfstate_storage_account_resource_group_name)
                                            }
 
 
@@ -141,6 +147,26 @@ output "app_vm_ips"                    {
 output "app_vm_ids"                    {
                                          description = "Virtual Machine IDs for the application servers"
                                          value       = module.app_tier.app_vm_ids
+                                       }
+
+output "app_subnet_netmask"            {
+                                         description = "Application subnet netmask; test-observable proof of whether the module created its own application subnet (greenfield) or looked up an existing one (brownfield)."
+                                         value       = module.app_tier.app_subnet_netmask
+                                       }
+
+output "app_tier_resource_creation_counts" {
+                                         description = "App tier resource creation cardinality (see terraform-units/modules/sap_system/app_tier/outputs.tf)"
+                                         value       = module.app_tier.app_tier_resource_creation_counts
+                                       }
+
+output "admin_tier_resource_creation_counts" {
+                                         description = "Admin tier resource creation cardinality (see terraform-units/modules/sap_system/common_infrastructure/outputs.tf)"
+                                         value       = module.common_infrastructure.admin_tier_resource_creation_counts
+                                       }
+
+output "database_tier_resource_creation_counts" {
+                                         description = "Database/storage tier resource creation cardinality (see terraform-units/modules/sap_system/common_infrastructure/outputs.tf)"
+                                         value       = module.common_infrastructure.database_tier_resource_creation_counts
                                        }
 
 output "scs_vm_ids" {
@@ -170,6 +196,14 @@ output "db_vm_ips"                     {
                                                    module.anydb_node.database_server_ips
                                                  ) #TODO Change to use Admin IP
                                        }
+
+output "db_vm_admin_ips"               {
+                                         description = "Database Virtual Machine Admin IPs"
+                                         value = upper(try(local.database.platform, "HANA")) == "HANA" ? (
+                                                   module.hdb_node.db_admin_ips) : (
+                                                   [])
+                                       }
+
 
 output "db_vm_secondary_ips"           {
                                          description = "Database Virtual Machine secondary IPs"
@@ -230,12 +264,53 @@ output "configuration_settings"        {
 
 output "app_id_used"                   {
                                          description = "The App ID used in the deployment"
-                                         value       = local.spn.client_id
+                                         value       = try(data.azurerm_key_vault_secret.client_id[0].value, "")
                                          sensitive   = true
                                        }
 
 output "subscription_id_used"          {
                                          description = "The Subscription ID configured in the key vault"
-                                         value       = local.spn.subscription_id
+                                         value       = length(var.subscription_id) > 0 ? var.subscription_id : data.azurerm_key_vault_secret.subscription_id[0].value
                                          sensitive   = true
+                                       }
+
+
+###############################################################################
+#                                                                             #
+#                    Test-observable content outputs                           #
+#                                                                             #
+###############################################################################
+
+output "hosts_file_content"            {
+                                         description = "Raw content of the generated Ansible inventory hosts YAML file (for plan-time test assertions)"
+                                         sensitive   = true
+                                         value       = module.output_files.hosts_file_content
+                                       }
+
+output "sap_parameters_content"        {
+                                         description = "Raw content of the generated sap-parameters YAML file (for plan-time test assertions)"
+                                         sensitive   = true
+                                         value       = module.output_files.sap_parameters_content
+                                       }
+
+
+###############################################################################
+#                                                                             #
+#                   Cross-subscription resolution outputs                     #
+#                                                                             #
+###############################################################################
+
+output "resolved_deployer_subscription_id" {
+                                         description = "Subscription ID resolved from the SPN key vault ARM ID coalesce() chain"
+                                         value       = local.deployer_subscription_id
+                                       }
+
+output "resolved_management_dns_subscription_id" {
+                                         description = "Management DNS subscription ID resolved from var/landscape coalesce() chain"
+                                         value       = local.dns_settings.management_dns_subscription_id
+                                       }
+
+output "resolved_privatelink_dns_subscription_id" {
+                                         description = "Private Link DNS subscription ID resolved from var/landscape fallback chain"
+                                         value       = local.dns_settings.privatelink_dns_subscription_id
                                        }

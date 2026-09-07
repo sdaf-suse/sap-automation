@@ -10,7 +10,7 @@
 
 resource "azurerm_netapp_account" "workload_netapp_account" {
   provider                             = azurerm.main
-  count                                = var.ANF_settings.use && length(var.ANF_settings.arm_id) == 0 ? 1 : 0
+  count                                = var.ANF_settings.use && length(var.ANF_settings.id) == 0 ? 1 : 0
   name                                 = format("%s%s%s%s",
                                            var.naming.resource_prefixes.netapp_account,
                                            local.prefix,
@@ -31,9 +31,9 @@ resource "azurerm_netapp_account" "workload_netapp_account" {
 
 data "azurerm_netapp_account" "workload_netapp_account" {
   provider                             = azurerm.main
-  count                                = var.ANF_settings.use && length(var.ANF_settings.arm_id) > 0 ? 1 : 0
-  name                                 = split("/", var.ANF_settings.arm_id)[8]
-  resource_group_name                  = split("/", var.ANF_settings.arm_id)[4]
+  count                                = var.ANF_settings.use && length(var.ANF_settings.id) > 0 ? 1 : 0
+  name                                 = split("/", var.ANF_settings.id)[8]
+  resource_group_name                  = split("/", var.ANF_settings.id)[4]
 }
 
 resource "azurerm_netapp_pool" "workload_netapp_pool" {
@@ -55,16 +55,16 @@ resource "azurerm_netapp_pool" "workload_netapp_pool" {
                                             local.resource_suffixes.netapp_pool
                                           )
                                         )
-  account_name                         = var.ANF_settings.use && length(var.ANF_settings.arm_id) > 0 ? (
+  account_name                         = var.ANF_settings.use && length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].name) : (
                                            azurerm_netapp_account.workload_netapp_account[0].name
                                          )
-  location                             = var.ANF_settings.use && length(var.ANF_settings.arm_id) > 0 ? (
+  location                             = var.ANF_settings.use && length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].location) : (
                                            azurerm_netapp_account.workload_netapp_account[0].location
                                          )
 
-  resource_group_name                  = var.ANF_settings.use && length(var.ANF_settings.arm_id) > 0 ? (
+  resource_group_name                  = var.ANF_settings.use && length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].resource_group_name) : (
                                            azurerm_netapp_account.workload_netapp_account[0].resource_group_name
                                          )
@@ -93,8 +93,8 @@ data "azurerm_netapp_pool" "workload_netapp_pool" {
                                              local.resource_suffixes.netapp_pool
                                            )
                                          )
-  resource_group_name                  = split("/", var.ANF_settings.arm_id)[4]
-  account_name                         = var.ANF_settings.use && length(var.ANF_settings.arm_id) > 0 ? (
+  resource_group_name                  = split("/", var.ANF_settings.id)[4]
+  account_name                         = var.ANF_settings.use && length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].name) : (
                                            azurerm_netapp_account.workload_netapp_account[0].name
                                          )
@@ -103,7 +103,7 @@ data "azurerm_netapp_pool" "workload_netapp_pool" {
 
 resource "azurerm_netapp_volume" "transport" {
   provider                             = azurerm.main
-  count                                = var.create_transport_storage && var.NFS_provider == "ANF" && !var.use_AFS_for_shared_storage ? (
+  count                                = var.create_transport_storage && var.NFS_provider == "ANF" ? (
                                            var.ANF_settings.use_existing_transport_volume ? (
                                              0) : (
                                              1
@@ -119,15 +119,15 @@ resource "azurerm_netapp_volume" "transport" {
                                          )
 
 
-  resource_group_name                  = length(var.ANF_settings.arm_id) > 0 ? (
+  resource_group_name                  = length(var.ANF_settings.id) > 0 ? (
                                           data.azurerm_netapp_account.workload_netapp_account[0].resource_group_name) : (
                                           azurerm_netapp_account.workload_netapp_account[0].resource_group_name
                                         )
-  location                             = length(var.ANF_settings.arm_id) > 0 ? (
+  location                             = length(var.ANF_settings.id) > 0 ? (
                                             data.azurerm_netapp_account.workload_netapp_account[0].location) : (
                                             azurerm_netapp_account.workload_netapp_account[0].location
                                           )
-  account_name                         = length(var.ANF_settings.arm_id) > 0 ? (
+  account_name                         = length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].name) : (
                                            azurerm_netapp_account.workload_netapp_account[0].name
                                          )
@@ -155,7 +155,7 @@ resource "azurerm_netapp_volume" "transport" {
                                            local.resource_suffixes.transport_volume
                                          )
   service_level                        = var.ANF_settings.service_level
-  subnet_id                            = local.ANF_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_anf.arm_id : azurerm_subnet.anf[0].id
+  subnet_id                            = var.infrastructure.virtual_networks.sap.subnet_anf.exists ? var.infrastructure.virtual_networks.sap.subnet_anf.id : azurerm_subnet.anf[0].id
   storage_quota_in_gb                  = var.ANF_settings.transport_volume_size
 
   network_features                     = "Standard"
@@ -164,8 +164,12 @@ resource "azurerm_netapp_volume" "transport" {
   tags                                 = var.tags
 
   export_policy_rule {
-                       allowed_clients     = ["0.0.0.0/0"]
-                       protocols_enabled   = ["NFSv4.1"]
+                       allowed_clients     = length(var.ANF_settings.export_policy_client_access_list) > 0 ? (
+                                                    var.ANF_settings.export_policy_client_access_list ) : (
+                                                      var.infrastructure.virtual_networks.sap.exists ? (
+                                                        data.azurerm_virtual_network.vnet_sap[0].address_space) : (
+                                                        azurerm_virtual_network.vnet_sap[0].address_space) )
+                       protocol            = ["NFSv4.1"]
                        rule_index          = 1
                        unix_read_only      = false
                        unix_read_write     = true
@@ -185,11 +189,11 @@ data "azurerm_netapp_volume" "transport" {
                                            ) : (
                                            0
                                          )
-  resource_group_name                  = length(var.ANF_settings.arm_id) > 0 ? (
+  resource_group_name                  = length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].resource_group_name) : (
                                            azurerm_netapp_account.workload_netapp_account[0].resource_group_name
                                          )
-  account_name                         = length(var.ANF_settings.arm_id) > 0 ? (
+  account_name                         = length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].name) : (
                                            azurerm_netapp_account.workload_netapp_account[0].name
                                          )
@@ -232,15 +236,15 @@ resource "azurerm_netapp_volume" "install" {
                                            local.resource_suffixes.install_volume
                                          )
 
-  resource_group_name                  = length(var.ANF_settings.arm_id) > 0 ? (
+  resource_group_name                  = length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].resource_group_name) : (
                                            azurerm_netapp_account.workload_netapp_account[0].resource_group_name
                                          )
-  location                             = length(var.ANF_settings.arm_id) > 0 ? (
+  location                             = length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].location) : (
                                            azurerm_netapp_account.workload_netapp_account[0].location
                                          )
-  account_name                         = length(var.ANF_settings.arm_id) > 0 ? (
+  account_name                         = length(var.ANF_settings.id) > 0 ? (
                                             data.azurerm_netapp_account.workload_netapp_account[0].name) : (
                                             azurerm_netapp_account.workload_netapp_account[0].name
                                           )
@@ -270,7 +274,7 @@ resource "azurerm_netapp_volume" "install" {
                                            local.resource_suffixes.install_volume
                                          )
   service_level                        = var.ANF_settings.service_level
-  subnet_id                            = local.ANF_subnet_existing ? var.infrastructure.virtual_networks.sap.subnet_anf.arm_id : azurerm_subnet.anf[0].id
+  subnet_id                            = var.infrastructure.virtual_networks.sap.subnet_anf.exists ? var.infrastructure.virtual_networks.sap.subnet_anf.id : azurerm_subnet.anf[0].id
 
   protocols                            = ["NFSv4.1"]
   network_features                     = "Standard"
@@ -278,8 +282,12 @@ resource "azurerm_netapp_volume" "install" {
   tags                                 = var.tags
 
   export_policy_rule {
-                       allowed_clients     = ["0.0.0.0/0"]
-                       protocols_enabled   = ["NFSv4.1"]
+                       allowed_clients     = length(var.ANF_settings.export_policy_client_access_list) > 0 ? (
+                                                    var.ANF_settings.export_policy_client_access_list ) : (
+                                                      var.infrastructure.virtual_networks.sap.exists ? (
+                                                        data.azurerm_virtual_network.vnet_sap[0].address_space) : (
+                                                        azurerm_virtual_network.vnet_sap[0].address_space) )
+                       protocol            = ["NFSv4.1"]
                        rule_index          = 1
                        unix_read_only      = false
                        unix_read_write     = true
@@ -299,11 +307,11 @@ data "azurerm_netapp_volume" "install" {
                                            ) : (
                                            0
                                          )
-  resource_group_name                  = length(var.ANF_settings.arm_id) > 0 ? (
+  resource_group_name                  = length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].resource_group_name) : (
                                            azurerm_netapp_account.workload_netapp_account[0].resource_group_name
                                          )
-  account_name                         = length(var.ANF_settings.arm_id) > 0 ? (
+  account_name                         = length(var.ANF_settings.id) > 0 ? (
                                            data.azurerm_netapp_account.workload_netapp_account[0].name) : (
                                            azurerm_netapp_account.workload_netapp_account[0].name
                                          )

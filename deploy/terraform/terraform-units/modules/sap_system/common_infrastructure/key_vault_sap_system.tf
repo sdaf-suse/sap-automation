@@ -1,6 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+data "azurerm_client_config" "current" {
+}
+
 ###############################################################################
 #                                                                             #
 #                Retrieve secrets from workload zone key vault                #
@@ -9,7 +12,7 @@
 data "azurerm_key_vault_secret" "sid_pk" {
   count                                = local.use_local_credentials ? 0 : 1
   name                                 = var.landscape_tfstate.sid_public_key_secret_name
-  key_vault_id                         = local.user_key_vault_id
+  key_vault_id                         = var.key_vault.user.id
 }
 
 data "azurerm_key_vault_secret" "sid_username" {
@@ -18,7 +21,7 @@ data "azurerm_key_vault_secret" "sid_username" {
                                            var.landscape_tfstate.sid_username_secret_name,
                                            trimprefix(format("%s-sid-username", var.naming.prefix.WORKLOAD_ZONE), "-")
                                          )
-  key_vault_id                         = local.user_key_vault_id
+  key_vault_id                         = var.key_vault.user.id
 }
 
 data "azurerm_key_vault_secret" "sid_password" {
@@ -27,7 +30,7 @@ data "azurerm_key_vault_secret" "sid_password" {
                                            var.landscape_tfstate.sid_password_secret_name,
                                            trimprefix(format("%s-sid-password", var.naming.prefix.WORKLOAD_ZONE), "-")
                                          )
-  key_vault_id                         = local.user_key_vault_id
+  key_vault_id                         = var.key_vault.user.id
 }
 
 ###############################################################################
@@ -37,6 +40,7 @@ data "azurerm_key_vault_secret" "sid_password" {
 #                                                                             #
 ###############################################################################
 resource "azurerm_key_vault" "sid_keyvault_user" {
+  #checkov:skip=CKV2_AZURE_32: private endpoints out of scope by default
   provider                             = azurerm.main
   count                                = local.enable_sid_deployment && local.use_local_credentials && length(local.user_key_vault_id) == 0 ? 1 : 0
   name                                 = local.user_keyvault_name
@@ -45,15 +49,15 @@ resource "azurerm_key_vault" "sid_keyvault_user" {
                                            data.azurerm_resource_group.resource_group[0].name) : (
                                            azurerm_resource_group.resource_group[0].name
                                          )
-  tenant_id                            = local.service_principal.tenant_id
+  tenant_id                            = data.azurerm_client_config.current.tenant_id
   soft_delete_retention_days           = 7
   purge_protection_enabled             = var.enable_purge_control_for_keyvaults
   sku_name                             = "standard"
   tags                                 = var.tags
 
   access_policy {
-                  tenant_id = local.service_principal.tenant_id
-                  object_id = local.service_principal.object_id
+                  tenant_id = data.azurerm_client_config.current.tenant_id
+                  object_id = data.azurerm_client_config.current.object_id
 
                   secret_permissions = [
                     "Delete",
@@ -94,6 +98,11 @@ resource "random_id" "sapsystem" {
   byte_length                          = 4
 }
 
+## Add an expiry date to the secrets
+resource "time_offset" "secret_expiry_date" {
+  offset_months = 12
+}
+
 // Generate random password if password is set as authentication type and
 # user doesn't specify a password, and save in Key Vault
 resource "random_password" "password" {
@@ -111,7 +120,12 @@ resource "azurerm_key_vault_secret" "auth_username" {
   name                                 = format("%s-username", try(coalesce(var.naming.resource_prefixes.sdu_secret, local.prefix), ""))
   value                                = local.sid_auth_username
   key_vault_id                         = length(local.user_key_vault_id) > 0 ? data.azurerm_key_vault.sid_keyvault_user[0].id : azurerm_key_vault.sid_keyvault_user[0].id
+  expiration_date                      = try(var.key_vault.set_secret_expiry, false) ? (
+                                           time_offset.secret_expiry_date.rfc3339) : (
+                                           null
+                                         )
   tags                                 = var.tags
+
 }
 
 // Store the password in KV when authentication type is password
@@ -122,7 +136,12 @@ resource "azurerm_key_vault_secret" "auth_password" {
   name                                 = format("%s-password", try(coalesce(var.naming.resource_prefixes.sdu_secret, local.prefix), ""))
   value                                = local.sid_auth_password
   key_vault_id                         = length(local.user_key_vault_id) > 0 ? data.azurerm_key_vault.sid_keyvault_user[0].id : azurerm_key_vault.sid_keyvault_user[0].id
+  expiration_date                      = try(var.key_vault.set_secret_expiry, false) ? (
+                                           time_offset.secret_expiry_date.rfc3339) : (
+                                           null
+                                         )
   tags                                 = var.tags
+
 }
 
 // Using TF tls to generate SSH key pair and store in user KV
@@ -143,7 +162,12 @@ resource "azurerm_key_vault_secret" "sdu_private_key" {
   name                                 = format("%s-sshkey", try(coalesce(var.naming.resource_prefixes.sdu_secret, local.prefix), ""))
   value                                = local.sid_private_key
   key_vault_id                         = length(local.user_key_vault_id) > 0 ? data.azurerm_key_vault.sid_keyvault_user[0].id : azurerm_key_vault.sid_keyvault_user[0].id
+  expiration_date                      = try(var.key_vault.set_secret_expiry, false) ? (
+                                           time_offset.secret_expiry_date.rfc3339) : (
+                                           null
+                                         )
   tags                                 = var.tags
+
 }
 
 resource "azurerm_key_vault_secret" "sdu_public_key" {
@@ -153,5 +177,10 @@ resource "azurerm_key_vault_secret" "sdu_public_key" {
   name                                 = format("%s-sshkey-pub", try(coalesce(var.naming.resource_prefixes.sdu_secret, local.prefix), ""))
   value                                = local.sid_public_key
   key_vault_id                         = length(local.user_key_vault_id) > 0 ? data.azurerm_key_vault.sid_keyvault_user[0].id : azurerm_key_vault.sid_keyvault_user[0].id
+  expiration_date                      = try(var.key_vault.set_secret_expiry, false) ? (
+                                           time_offset.secret_expiry_date.rfc3339) : (
+                                           null
+                                         )
   tags                                 = var.tags
+
 }

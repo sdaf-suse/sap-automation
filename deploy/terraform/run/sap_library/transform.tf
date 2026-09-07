@@ -9,22 +9,39 @@ locals {
                                            codename           = var.codename
                                            resource_group     = {
                                              name             = var.resourcegroup_name
-                                             arm_id           = var.resourcegroup_arm_id
+                                             id               = var.resourcegroup_arm_id
+                                             exists           = length(var.resourcegroup_arm_id) > 0
                                                }
-                                           tags               = try(coalesce(var.resourcegroup_tags, var.tags, {}), {})
+                                           tags               = var.tags
                                            assign_permissions = var.assign_permissions
                                            spn_id             = var.spn_id
 
                                          }
   deployer                             = {
                                            use                          = var.use_deployer
-                                           application_configuration_id = var.application_configuration_id
+                                           application_configuration_id = trimspace(coalesce(var.application_configuration_id,
+                                                                                             contains(keys(local.deployer_outputs), "application_configuration_id") ? (
+                                                                                               local.deployer_outputs.application_configuration_id) : (
+                                                                                               " "),
+                                                                                             " "))
+                                           control_plane_name           = trimspace(coalesce(var.control_plane_name,
+                                                                                             contains(keys(local.deployer_outputs), "control_plane_name") ? (
+                                                                                               local.deployer_outputs.control_plane_name) : (
+                                                                                               " "),
+                                                                                             " "))
+                                           resource_group_name          = format("%s-INFRASTRUCTURE", trimspace(coalesce(var.control_plane_name,
+                                                                                             contains(keys(local.deployer_outputs), "control_plane_name") ? (
+                                                                                               local.deployer_outputs.control_plane_name) : (
+                                                                                               " "),
+                                                                                             " ")))
+                                          management_network_id          = var.management_network_id
                                          }
   key_vault                            = {
-                                           keyvault_id_for_deployment_credentials = coalesce(var.spn_keyvault_id, local.spn_key_vault_arm_id)
+                                           id                        = coalesce(try(local.deployer_outputs.deployer_kv_user_arm_id, ""), var.spn_keyvault_id, local.spn_key_vault_arm_id)
                                          }
   storage_account_sapbits              = {
-                                            arm_id                   = var.library_sapmedia_arm_id
+                                            id                       = var.library_sapmedia_arm_id
+                                            exists                   = length(var.library_sapmedia_arm_id) > 0
                                             name                     = var.library_sapmedia_name
                                             account_tier             = var.library_sapmedia_account_tier
                                             account_replication_type = var.library_sapmedia_account_replication_type
@@ -39,13 +56,18 @@ locals {
                                               is_existing            = var.library_sapmedia_blob_container_is_existing
                                               name                   = coalesce(var.library_sapmedia_blob_container_name, module.sap_namegenerator.naming.resource_suffixes.sapbits)
                                             }
-                                           shared_access_key_enabled = var.shared_access_key_enabled
-                                           public_network_access_enabled = var.public_network_access_enabled
+                                           shared_access_key_enabled                 = var.shared_access_key_enabled
+                                           routing_preference_enabled                = var.routing_preference_enabled
+                                           public_network_access_enabled             = try(
+                                                                                               local.deployer_outputs.network_security_perimeter_deployment,
+                                                                                               true
+                                                                                             ) && var.public_network_access_enabled
                                            enable_firewall_for_keyvaults_and_storage = var.enable_firewall_for_keyvaults_and_storage
                                          }
 
    storage_account_tfstate              = {
-                                           arm_id                                    = var.library_terraform_state_arm_id
+                                           id                                        = var.library_terraform_state_arm_id
+                                           exists                                    = length(var.library_terraform_state_arm_id) > 0
                                            name                                      = var.library_terraform_state_name
                                            account_tier                              = var.library_terraform_state_account_tier
                                            account_replication_type                  = var.library_terraform_state_account_replication_type
@@ -66,7 +88,11 @@ locals {
                                                                                      }
 
                                            shared_access_key_enabled                 = var.shared_access_key_enabled
-                                           public_network_access_enabled             = var.public_network_access_enabled
+                                           routing_preference_enabled                = var.routing_preference_enabled
+                                           public_network_access_enabled             = try(
+                                                                                               local.deployer_outputs.network_security_perimeter_deployment,
+                                                                                               true
+                                                                                             ) && var.public_network_access_enabled
                                            enable_firewall_for_keyvaults_and_storage = var.enable_firewall_for_keyvaults_and_storage
                                          }
 
@@ -87,5 +113,6 @@ locals {
                                            create_privatelink_dns_zones              = var.create_privatelink_dns_zones
 
                                            additional_network_id                     = var.additional_network_id
+
                                          }
 }

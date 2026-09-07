@@ -51,7 +51,7 @@ output "admin_subnet_id"                         {
 
 output "admin_nsg_id"                            {
                                                    description = "Azure resource identifier for the admin subnet network security group"
-                                                   value       = module.sap_landscape.admin_nsg_id
+                                                   value       = length(var.admin_subnet_nsg_arm_id) > 0 ? var.admin_subnet_nsg_arm_id : module.sap_landscape.admin_nsg_id
                                                  }
 
 output "app_subnet_id"                           {
@@ -61,7 +61,7 @@ output "app_subnet_id"                           {
 
 output "app_nsg_id"                              {
                                                    description = "Azure resource identifier for the app subnet network security group"
-                                                   value       = module.sap_landscape.app_nsg_id
+                                                   value       = length(var.app_subnet_nsg_arm_id) > 0 ? var.app_subnet_nsg_arm_id : module.sap_landscape.app_nsg_id
                                                  }
 
 output "db_subnet_id"                            {
@@ -71,7 +71,7 @@ output "db_subnet_id"                            {
 
 output "db_nsg_id"                               {
                                                    description = "Azure resource identifier for the database subnet network security group"
-                                                   value       = module.sap_landscape.db_nsg_id
+                                                   value       = length(var.db_subnet_nsg_arm_id) > 0 ? var.db_subnet_nsg_arm_id : module.sap_landscape.db_nsg_id
                                                  }
 
 output "ams_subnet_id"                           {
@@ -101,7 +101,7 @@ output "web_subnet_id"                           {
 
 output "web_nsg_id"                              {
                                                    description = "Azure resource identifier for the web subnet network security group"
-                                                   value       = module.sap_landscape.web_nsg_id
+                                                   value       = length(var.web_subnet_nsg_arm_id) > 0 ? var.web_subnet_nsg_arm_id : module.sap_landscape.web_nsg_id
                                                  }
 output "use_separate_storage_subnet"             {
                                                    description = "Use a separate storage subnet"
@@ -114,7 +114,7 @@ output "storage_subnet_id"                       {
 
 output "storage_nsg_id"                          {
                                                    description = "Azure resource identifier for the storage subnet network security group"
-                                                   value       = module.sap_landscape.storage_nsg_id
+                                                   value       = length(var.storage_subnet_nsg_arm_id) > 0 ? var.storage_subnet_nsg_arm_id : module.sap_landscape.storage_nsg_id
                                                  }
 
 ###############################################################################
@@ -131,12 +131,17 @@ output "landscape_key_vault_private_arm_id"      {
 
 output "landscape_key_vault_spn_arm_id"          {
                                                    description = "Azure resource identifier for the deployment credential keyvault"
-                                                   value       = local.spn_key_vault_arm_id
+                                                   value       = var.spn_keyvault_id
                                                  }
 
 output "landscape_key_vault_user_arm_id"         {
                                                    description = "Azure resource identifier for the user credential keyvault"
-                                                   value       = length(var.user_keyvault_id) > 0 ? var.user_keyvault_id : module.sap_landscape.kv_user
+                                                   value       = length(trimspace(var.user_keyvault_id)) > 0 ? var.user_keyvault_id : module.sap_landscape.kv_user
+                                                 }
+
+output "user_credential_vault_id"         {
+                                                   description = "Azure resource identifier for the user credential keyvault"
+                                                   value       = module.sap_landscape.user_credential_vault_id
                                                  }
 
 output "sid_password_secret_name"                {
@@ -156,12 +161,17 @@ output "sid_username_secret_name"                {
 
 output "spn_kv_id"                               {
                                                    description = "Name of key vault secret containing deployment credentials"
-                                                   value       = local.spn_key_vault_arm_id
+                                                   value       = local.key_vault.spn.id
+                                                 }
+
+output "spn_credential_vault_id"                 {
+                                                   description = "Name of key vault secret containing deployment credentials"
+                                                   value       = local.key_vault.spn.id
                                                  }
 
 output "workloadzone_kv_name"                    {
                                                    description = "Workload zone keyvault name"
-                                                   value       = lower(length(var.user_keyvault_id) > 0 ? split("/", var.user_keyvault_id)[8] : try(split("/", module.sap_landscape.kv_user)[8], ""))
+                                                   value       = length(var.user_keyvault_id) > 0 ? split("/", var.user_keyvault_id)[8] : try(split("/", module.sap_landscape.kv_user)[8], "")
                                                  }
 
 ###############################################################################
@@ -202,26 +212,26 @@ output "dns_label"                               {
 
 output "dns_resource_group_name"                 {
                                                    description = "Resource group name for the resource group containing the local Private DNS Zone"
-                                                   value = local.saplib_resource_group_name
+                                                   value = local.tfstate_storage_account_resource_group_name
                                                  }
 
 output "management_dns_resourcegroup_name"       {
                                                    description = "Resource group name for the resource group containing the public Private DNS Zone"
-                                                   value       = coalesce(var.management_dns_resourcegroup_name, local.saplib_resource_group_name)
+                                                   value       = coalesce(var.management_dns_resourcegroup_name, local.tfstate_storage_account_resource_group_name)
                                                  }
 
 output "management_dns_subscription_id"          {
                                                    description = "Subscription ID for the public Private DNS Zone"
-                                                   value       = coalesce(var.management_dns_subscription_id, local.saplib_subscription_id)
+                                                   value       = coalesce(var.management_dns_subscription_id, local.tfstate_storage_account_subscription_id)
                                                  }
 
 output "privatelink_dns_resourcegroup_name"       {
-                                                   value       = coalesce(var.privatelink_dns_resourcegroup_name, var.management_dns_resourcegroup_name, local.saplib_resource_group_name)
+                                                   value       = coalesce(var.privatelink_dns_resourcegroup_name, var.management_dns_resourcegroup_name, local.tfstate_storage_account_resource_group_name)
                                                  }
 
 output "privatelink_dns_subscription_id"          {
                                                    description = "Subscription ID for the PrivateLink Private DNS Zones"
-                                                   value       = coalesce(var.privatelink_dns_subscription_id, var.management_dns_subscription_id, local.saplib_subscription_id)
+                                                   value       = coalesce(var.privatelink_dns_subscription_id, var.management_dns_subscription_id, local.tfstate_storage_account_subscription_id)
                                                  }
 
 
@@ -276,6 +286,17 @@ output "witness_storage_account_key"             {
                                                    description = "Witness storage account account key"
                                                    sensitive   = true
                                                    value       = module.sap_landscape.witness_storage_account_key
+                                                 }
+
+//Utility Storage
+output "utility_storage_account_ids"             {
+                                                   description = "List of utility storage account IDs"
+                                                   value       = module.sap_landscape.utility_storage_account_ids
+                                                 }
+
+output "utility_storage_account_names"           {
+                                                   description = "List of utility storage account names"
+                                                   value       = module.sap_landscape.utility_storage_account_names
                                                  }
 
 ###############################################################################
@@ -373,3 +394,56 @@ output ng_resource_id                           {
                                                   description = "NAT Gateway resource ID"
                                                   value       = module.sap_landscape.ng_resource_id
                                                 }
+
+
+
+###############################################################################
+#                                                                             #
+#                           Application Configuration                         #
+#                                                                             #
+###############################################################################
+
+
+output "application_configuration_name"                {
+                                                    description = "Application Configuration Name"
+                                                    value       = length(local.infrastructure.application_configuration_id) > 0 ? (
+                                                                    local.infrastructure.application_configuration_id) : (
+                                                                    ""
+                                                                  )
+                                                 }
+
+output "application_configuration_id"            {
+                                                    description = "Application Configuration Azure Resource Id"
+                                                    value       = local.infrastructure.application_configuration_id
+                                                 }
+
+output "control_plane_name"                      {
+                                                    description = "Control plane name"
+                                                    value       = var.control_plane_name
+                                                 }
+
+output "workload_zone_name"                      {
+                                                    description = "Workload Zone name"
+                                                    value       = local.workload_zone_name
+                                                 }
+
+###############################################################################
+#                                                                             #
+#                   Cross-subscription resolution outputs                     #
+#                                                                             #
+###############################################################################
+
+output "resolved_deployer_subscription_id"         {
+                                                     description = "Subscription ID resolved from the deployer coalesce() chain (remote state → tfstate → spn_keyvault_id)"
+                                                     value       = local.deployer_subscription_id
+                                                   }
+
+output "resolved_management_dns_subscription_id"   {
+                                                     description = "Management DNS subscription ID resolved from coalesce(var → tfstate fallback)"
+                                                     value       = coalesce(var.management_dns_subscription_id, local.tfstate_storage_account_subscription_id)
+                                                   }
+
+output "resolved_privatelink_dns_subscription_id"  {
+                                                     description = "Private Link DNS subscription ID resolved from coalesce(var → management_dns → tfstate fallback)"
+                                                     value       = coalesce(var.privatelink_dns_subscription_id, var.management_dns_subscription_id, local.tfstate_storage_account_subscription_id)
+                                                   }

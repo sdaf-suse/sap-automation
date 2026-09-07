@@ -2,6 +2,13 @@
 # Licensed under the MIT License.
 
 variable "admin_subnet"                                 { description = "Information about SAP admin subnet" }
+
+variable "AFS_enable_encryption_in_transit"             {
+                                                           description = "Enable encryption in transit for Azure Files"
+                                                           type        = bool
+                                                           default     = false
+                                                        }
+
 variable "anchor_vm"                                    {
                                                           description = "Deployed anchor VM"
                                                           default     = null
@@ -14,13 +21,9 @@ variable "custom_disk_sizes_filename"                   {
                                                         }
 variable "database"                                     {}
 
-variable "database_dual_nics"                           {
-                                                          description = "Defines if the HANA DB uses dual network interfaces"
-                                                          default     = true
-                                                        }
 variable "enable_storage_nic"                           {
                                                           description = "Boolean to determine if a storage nic should be used when scale out is enabled"
-                                                          default     = true
+                                                          type        = bool
                                                         }
 variable "database_server_count"                        {
                                                           description = "The number of database servers"
@@ -40,6 +43,7 @@ variable "database_vm_db_nic_secondary_ips"             { description = "If prov
 variable "database_vm_storage_nic_ips"                  { description = "If provided, the database tier will be configured with the specified IPs (srorage subnet)" }
 variable "db_asg_id"                                    { description = "Database Application Security Group" }
 variable "db_subnet"                                    { description = "Information about SAP db subnet" }
+variable "deployer_tfstate"                             { description = "Deployer remote tfstate file" }
 variable "deploy_application_security_groups"           { description = "Defines if application security groups should be deployed" }
 variable "deployment"                                   { description = "The type of deployment" }
 variable "fencing_role_name"                            { description = "If specified the role name to use for the fencing" }
@@ -63,7 +67,7 @@ variable "sid_keyvault_user_id"                         { description = "Details
 variable "sid_password"                                 { description = "SDU password" }
 variable "sid_username"                                 { description = "SDU username" }
 variable "storage_bootdiag_endpoint"                    { description = "Details of the boot diagnostics storage account" }
-variable "storage_subnet"                               { description = "Information about storage subnet" }
+variable "storage_subnet_id"                            { description = "Information about storage subnet" }
 variable "terraform_template_version"                   { description = "The version of Terraform templates that were identified in the state file" }
 variable "use_admin_nic_suffix_for_observer"            { description = "If true, the admin nic suffix will be used for the observer" }
 variable "use_admin_nic_for_asg"                        { description = "If true, the admin nic will be assigned to the ASG instead of the second nic" }
@@ -71,7 +75,8 @@ variable "use_loadbalancers_for_standalone_deployments" {
                                                           description = "Defines if load balancers are used even for standalone deployments"
                                                           default     = true
                                                         }
-variable "use_msi_for_clusters"                         { description = "If true, the Pacemaker cluser will use a managed identity" }
+variable "use_msi_for_clusters"                         { description = "If true, the Pacemaker cluster will use a managed identity" }
+
 variable "use_observer"                                 { description = "Use Observer VM" }
 variable "observer_vm_size"                             {}
 variable "observer_vm_zones"                            {}

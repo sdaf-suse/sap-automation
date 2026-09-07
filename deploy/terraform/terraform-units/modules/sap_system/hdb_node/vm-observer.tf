@@ -25,7 +25,7 @@ resource "azurerm_network_interface" "observer" {
 
   ip_configuration {
                     name      = "IPConfig1"
-                    subnet_id = try(var.admin_subnet.id, var.landscape_tfstate.admin_subnet_id)
+                    subnet_id = (var.infrastructure.virtual_networks.sap.subnet_admin.exists || var.infrastructure.virtual_networks.sap.subnet_admin.exists_in_workload) ? var.admin_subnet.id : var.db_subnet.id
                     private_ip_address = var.database.use_DHCP ? (
                       null) : (
                       try(var.database.observer_vm_ips[count.index],
@@ -49,6 +49,7 @@ resource "azurerm_network_interface" "observer" {
 #######################################4#######################################8
 
 resource "azurerm_linux_virtual_machine" "observer" {
+  #checkov:skip=CKV_AZURE_50: observer has no monitoring agent by design
   provider                             = azurerm.main
   count                                = var.use_observer ? 1 : 0
   depends_on                           = [var.anchor_vm]
@@ -80,14 +81,13 @@ resource "azurerm_linux_virtual_machine" "observer" {
 
   license_type                         = length(var.license_type) > 0 ? var.license_type : null
 
-  tags                                 = try(var.observer_vm_tags, merge(local.tags, var.tags))
-
   encryption_at_host_enabled           = var.infrastructure.encryption_at_host_enabled
 
   patch_mode                                             = var.infrastructure.patch_mode
   patch_assessment_mode                                  = var.infrastructure.patch_assessment_mode
   bypass_platform_safety_checks_on_user_schedule_enabled = var.infrastructure.patch_mode != "AutomaticByPlatform" ? false : true
 
+  tags                                = var.tags
   dynamic "admin_ssh_key" {
                             for_each = range(var.deployment == "new" ? 1 : (local.enable_auth_password ? 0 : 1))
                             content {
@@ -120,8 +120,51 @@ resource "azurerm_linux_virtual_machine" "observer" {
                                      }
                                    }
 
+  dynamic "plan" {
+                   for_each = range(var.database.os.type == "marketplace_with_plan" ? 1 : 0)
+                   content {
+                             name      = local.observer_os.sku
+                             publisher = local.observer_os.publisher
+                             product   = local.observer_os.offer
+                           }
+                 }
+
   boot_diagnostics {
                      storage_account_uri = var.storage_bootdiag_endpoint
                    }
 
+  dynamic "identity" {
+                       for_each = range((var.use_msi_for_clusters && var.database.high_availability) || length(var.database.user_assigned_identity_id) > 0 ? 1 : 0)
+                       content {
+                         type         = var.use_msi_for_clusters && length(var.database.user_assigned_identity_id) > 0 ? "SystemAssigned, UserAssigned" : var.use_msi_for_clusters ? "SystemAssigned" : "UserAssigned"
+                         identity_ids = length(var.database.user_assigned_identity_id) > 0 ? [var.database.user_assigned_identity_id] : null
+                       }
+                     }
+
+}
+
+
+
+resource "azurerm_virtual_machine_data_disk_attachment" "cluster_observer" {
+  provider                             = azurerm.main
+  depends_on                           = [ azurerm_managed_disk.cluster ]
+  count                                = (
+                                           var.use_observer &&
+                                           var.database.high_availability &&
+                                           (
+                                             upper(var.database.os.os_type) == "WINDOWS" ||
+                                             (
+                                               upper(var.database.os.os_type) == "LINUX" &&
+                                               upper(var.database.database_cluster_type) == "ASD"
+                                             )
+                                           )
+                                         ) ? 1 : 0
+  managed_disk_id                      = azurerm_managed_disk.cluster[0].id
+  virtual_machine_id                   = azurerm_linux_virtual_machine.observer[0].id
+  caching                              = "None"
+  lun                                  = var.database.database_cluster_disk_lun
+
+  lifecycle {
+    create_before_destroy = false
+  }
 }

@@ -21,7 +21,16 @@ locals {
   sdu_storageaccount_name                         = substr(replace(lower(format("%s%s%sdiag%s", local.env_verified, local.location_short, local.sap_vnet_verified, local.random_id_verified)), "/[^a-z0-9]/", ""), 0, var.azlimits.stgaccnt)
   terraformstate_storageaccount_name              = substr(replace(lower(format("%s%stfstate%s", local.library_env_verified, local.location_short, local.random_id_verified)), "/[^a-z0-9]/", ""), 0, var.azlimits.stgaccnt)
 
+  deployer_appconfig_name                         = substr(replace(lower(format("%s%sapc%s", local.deployer_env_verified, local.deployer_location_short, local.random_id_verified)), "/[^a-z0-9]/", ""), 0, var.azlimits.stgaccnt)
   // Witness account
   witness_storageaccount_name = substr(replace(lower(format("%s%s%switness%s", local.landscape_env_verified, local.location_short, local.sap_vnet_verified, local.random_id_verified)), "/[^a-z0-9]/", ""), 0, var.azlimits.stgaccnt)
+
+  landscape_utility_storage_account_names         = [
+                                                      for idx in range(var.utility_storage_count) :
+                                                      substr(replace(lower(format("%s%s%sutil%02d%s",
+                                                        local.landscape_env_verified, local.location_short, local.sap_vnet_verified, idx, local.random_id_verified
+                                                      )), "/[^a-z0-9]/", ""), 0, var.azlimits.stgaccnt)
+                                                    ]
+  network_security_perimeter_name  = upper(format("%s-%s%s", local.env_verified, local.location_short, "_network_security_perimeter"))
 
 }
