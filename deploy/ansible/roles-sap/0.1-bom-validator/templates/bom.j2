@@ -1,39 +1,96 @@
-{# Copyright (c) Microsoft Corporation.
- # Licensed under the MIT License.
-#}
-name:      {{ root_bom.name }}
-filename:      {% if root_bom.filename is defined %}{{ root_bom.filename }}{% endif %}
+# BOM Template File
+#
+# Downloaded on {{ ansible_date_time.date }} at {{ ansible_date_time.time }}
 
-target:        {{ root_bom.target }}
+name:                 {{ new_bom_name }}
 
-version:       {{ root_bom.version }}
+filename:             {% if new_bom_file_name is defined %}{{ new_bom_file_name }}{% endif %}
 
-platform:      {% if root_bom.platform is defined %}{{ root_bom.platform }}{% endif %}
+target:               {{ root_bom.target }}
 
-InstanceType:  {% if root_bom.InstanceType is defined %}{{ root_bom.InstanceType }}{% else %}ABAP{% endif %}
+version:              {{ root_bom.version }}
+
+platform:             {% if root_bom.platform is defined %}{{ root_bom.platform }}{% else %}{{ platform }}{% endif %}
+{% set platform_code = '.HDB.' %}
+{% if platform is defined %}
+{%   if platform == 'ORACLE' %}
+{%     set platform_code = '.ORA.' %}
+{%   elif platform == 'ORACLE-ASM' %}
+{%     set platform_code = '.ORA.' %}
+{%   elif platform == 'DB2' %}
+{%     set platform_code = '.DB6.' %}
+{%   elif platform == 'SYBASE' %}
+{%     set platform_code = '.SYB.' %}
+{%   elif platform == 'SQLSERVER' %}
+{%     set platform_code = '.MSS.' %}
+{%   endif %}
+{% elif root_bom.platform is defined %}
+{%   if root_bom.platform == 'ORACLE' %}
+{%     set platform_code = '.ORA.' %}
+{%   elif root_bom.platform == 'ORACLE-ASM' %}
+{%     set platform_code = '.ORA.' %}
+{%   elif root_bom.platform == 'DB2' %}
+{%     set platform_code = '.DB6.' %}
+{%   elif root_bom.platform == 'SYBASE' %}
+{%     set platform_code = '.SYB.' %}
+{%   elif root_bom.platform == 'SQLSERVER' %}
+{%     set platform_code = '.MSS.' %}
+{%   endif %}
+{% endif %}
+
+platform_code:        {% if platform_code %}{{ platform_code }}{% endif %}
+
+InstanceType:         {% if root_bom.InstanceType is defined %}{{ root_bom.InstanceType }}{% else %}ABAP{% endif %}
+
+supportedPlatforms:   {% if root_bom.supportedPlatforms is defined %}{{ root_bom.supportedPlatforms }}{% endif %}
+
+supportedDBVersions:  {% if root_bom.supportedDBVersions is defined %}{{ root_bom.supportedDBVersions }}{% endif %}
+
+supportedKernels:     {% if root_bom.supportedKernels is defined %}{{ root_bom.supportedKernels }}{% endif %}
+
+minimumRedHatVersion: {% if minimumRedHatVersion is defined %}{{ minimumRedHatVersion }}{% endif %}
+
+minimumSLESVersion:   {% if minimumSLESVersion is defined %}{{ minimumSLESVersion }}{% endif %}
 
 
 product_ids:
-
-{% if root_bom.product_ids is defined %}
+{% if root_bom.product_ids is defined and root_bom.product_ids is mapping %}
 {%   for pKey,pValue in root_bom.product_ids.items() %}
-{{'  %-10s' | format(pKey | trim +':') }}{{' \"%s\"' | format(pValue | trim) }}
+{{'  %-10s' | format(pKey | trim +':') }}{{' \"%s\"' | format(pValue | trim | replace('.HDB.', platform_code)) }}
 {%   endfor %}
 {% endif %}
 
+{% if patch_information is defined %}
+{%   if patch_information is mapping %}
+patch_information:
+{%     for pKey,pValue in patch_information.items() %}
+{{'  %-20s' | format(pKey | trim +':') }}{{' \"%s\"' | format(pValue | trim) }}
+{%     endfor %}
+{%   else %}
+{%     for patch_entry in patch_information | flatten | select('mapping') | list %}
+{%       for pKey,pValue in patch_entry.items() %}
+{{'  %-20s' | format(pKey | trim +':') }}{{' \"%s\"' | format(pValue | trim) }}
+{%       endfor %}
+{%     endfor %}
+{%   endif %}
+{% endif %}
 
 materials:
   media:
-{% for media in root_media_list %}
-
+{% for media in root_media_list | flatten | select('mapping') | list %}
 {{'    %-16s' | format('- name:' | trim) }}{{'\"%s\"' | format(media.name | trim) }}
-{%   for key,value in media.items() %}
-{%     if key != 'name' %}
+{%   set preferred_media_keys = ['archive', 'checksum', 'filename', 'path', 'url', 'download', 'extract', 'extractDir', 'creates', 'permissions'] %}
+{%   for key in preferred_media_keys %}
+{%     if key in media %}
 {%       if key == 'permissions' %}
-{{'      %-13s' | format(key + ':' | trim) }}{{' \'%s\'' | format(value | trim) }}
+{{'      %-13s' | format(key + ':' | trim) }}{{' \'%s\'' | format(media[key] | trim) }}
 {%       else %}
-{{'      %-13s' | format(key + ':' | trim) }}{{' %s'     | format(value | trim) }}
+{{'      %-13s' | format(key + ':' | trim) }}{{' %s'     | format(media[key] | trim) }}
 {%       endif %}
 {%     endif %}
 {%   endfor %}
+{%   for key in media.keys() | reject('equalto', 'name') | reject('in', preferred_media_keys) | sort %}
+{{'      %-13s' | format(key + ':' | trim) }}{{' %s'     | format(media[key] | trim) }}
+{%   endfor %}
+
 {% endfor %}

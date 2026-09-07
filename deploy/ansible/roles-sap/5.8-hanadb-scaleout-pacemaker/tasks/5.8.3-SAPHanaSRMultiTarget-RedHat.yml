@@ -5,30 +5,36 @@
 
 # /*---------------------------------------------------------------------------8
 # |                                                                            |
-# |  Implement the Python system replication hook SAPHanaSR-ScaleOut                    |
+# |  Implement the Python system replication hook SAPHanaSR-Scale-out                    |
 # |  Ref: https://learn.microsoft.com/en-us/azure/sap/workloads/sap-hana-high-availability-scale-out-hsr-rhel?tabs=lb-portal#create-sap-hana-cluster-resources
-# |  Begin: configuration for SAPHanaSR-ScaleOut python hook                            |
+# |  Begin: configuration for SAPHanaSR-Scale-out python hook                            |
 # |                                                                            |
 # +------------------------------------4--------------------------------------*/
 
-- name:                                "5.8 HANA Pacemaker Scaleout - HANA 2.0 only - Implement the Python system replication hook SAPHanaSR-ScaleOut MultiTarget"
+- name:                                "5.8 HANA Pacemaker Scale-out - HANA 2.0 only - Implement the Python system replication hook SAPHanaSR-Scale-out MultiTarget"
   when:
-    - hdb_version[0:2] == "2."
-    - database_high_availability
+                                       - node_tier == 'hana'
+                                       - hdb_version[0:2] == "2."
+                                       - database_high_availability
+                                       - not (use_hanasr_angi | default(false) and is_certified_for_hanasr_angi | default(false))
   block:
-    - name:                            "5.8 HANA Pacemaker Scaleout - Generate list of deployed packages on current host"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Generate list of deployed packages on current host"
       ansible.builtin.package_facts:
 
-    # for RHEL, ensure resource-agents-sap-hana-scaleout is installed
+    - name:                            "5.8 HANA Pacemaker Scale-out - Set SAPHanaSR provider path for RHEL"
+      ansible.builtin.set_fact:
+        saphanasr_provider_path:       /usr/share/SAPHanaSR-ScaleOut
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Ensure resource-agents-sap-hana is absent (REDHAT)"
+    # for RHEL, ensure resource-agents-sap-hana-Scale-out is installed
+
+    - name:                            "5.8 HANA Pacemaker Scale-out - Ensure resource-agents-sap-hana is absent (REDHAT)"
       ansible.builtin.package:
         name:                          resource-agents-sap-hana
         state:                         absent
       when:
         - ansible_facts.packages['resource-agents-sap-hana'] is defined
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Ensure resource-agents-sap-hana-scaleout is installed (REDHAT)"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Ensure resource-agents-sap-hana-scaleout is installed (REDHAT)"
       ansible.builtin.package:
         name:                          resource-agents-sap-hana-scaleout
         state:                         present
@@ -37,18 +43,18 @@
 
     # <TODO> add package verification for RHEL based on link https://access.redhat.com/articles/3397471
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Check HANA DB Version and register"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Check HANA DB Version and register"
       become_user:                     "{{ db_sid | lower }}adm"
       become:                          true
       ansible.builtin.command:         /hana/shared/{{ db_sid | upper }}/HDB{{ db_instance_number }}/HDB version
       register:                        hdb_version_output
       changed_when:                    false
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Extract SAP HANA version number"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Extract SAP HANA version number"
       ansible.builtin.set_fact:
         hana_version_str: "{{ hdb_version_output.stdout | regex_search('version:\\s+([\\d\\.]+)', '\\1') | first }}"
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Assert SAP HANA version is greater than SAP HANA 2.0 SP5"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Assert SAP HANA version is greater than SAP HANA 2.0 SP5"
       ansible.builtin.assert:
         that:
           - hana_version_str is version('2.00.050', '>=')
@@ -57,51 +63,222 @@
       register:                        hana_sp_version
       when: hdb_version_output.stdout is search("version")
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Check if 'myHooks' file exists in /hana/shared directory"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Check if 'myHooks' file exists in /hana/shared directory"
       ansible.builtin.stat:
         path:                          /hana/shared/myHooks
       register:                        my_hooks_stat
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Stop HANA System on both sites"
-      become_user:                     "{{ db_sid | lower }}adm"
-      become:                          true
-      ansible.builtin.command:         "{{ sapcontrol_command }}  -function StopSystem"
-      failed_when:                     false
-      changed_when:                    false
-      register:                        hana_system_stopped
-      when:
-        - ansible_hostname == primary_instance_name or ansible_hostname == secondary_instance_name
-
-    - name:                            "5.8 HANA Pacemaker Scaleout - Wait for SAP system to stop"
-      ansible.builtin.debug:
-        msg:                           "5.8 HANA Pacemaker Scaleout - Wait {{ hana_wait_for_stop_in_sec }} seconds for SAP system to stop"
-
-    - name:                            "5.8 HANA Pacemaker Scaleout - Wait for SAP system to stop"
-      ansible.builtin.wait_for:
-        timeout:                       "{{ hana_wait_for_stop_in_sec }}"
-
-    - name:                            "5.8 HANA Pacemaker Scaleout - Copy Python hooks from /usr/share/SAPHanaSR-ScaleOut/ to /hana/shared/myHooks/ (RHEL)"
-      ansible.builtin.copy:
-        src:                           /usr/share/SAPHanaSR-ScaleOut/{{ item }}
-        dest:                          /hana/shared/myHooks/
-        remote_src:                    true
-        owner:                         root
-        group:                         root      # TODO - check the correct group once the python hook package is installed
-        mode:                          '0644'
-      loop:
-        - SAPHanaSR.py
-        - ChkSrv.py
-      when: not my_hooks_stat.stat.exists
-
-    - name:                            "5.8 HANA Pacemaker Scaleout - Change ownership of the directory"
+    - name:                            "5.8.5 HANA Pacemaker Scale-out - Remove Global.ini flag, if cluster was not created by the deployment automation"
+      when:                            not hana_cluster_existence_check
       ansible.builtin.file:
-        path:                          /hana/shared/myHooks
-        state:                         directory
-        recurse:                       true
-        owner:                         "{{ db_sid | lower }}adm"
-        group:                         sapsys
+        path:                          /etc/sap_deployment_automation/sap_deployment_global_ini.txt
+        state:                         absent
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Prepare global.ini for host name resolution"
+
+    - name:                            "5.8 HANA Pacemaker Scale-out - Configure global.ini for host name resolution if global.ini file does not exist"
+      when:                            not hana_cluster_existence_check
+      block:
+
+        - name:                        "5.8 HANA Pacemaker Scale-out - Execute HANA StopSystem on both sites"
+          when:                        ansible_hostname in [ primary_instance_name , secondary_instance_name ]
+          become_user:                 "{{ db_sid | lower }}adm"
+          become:                      true
+          ansible.builtin.command:     "{{ sapcontrol_command }}  -function StopSystem  {{ db_sid | upper }}"
+          failed_when:                 false
+          changed_when:                false
+          register:                    hana_system_stopped
+
+        - name:                        "5.8 HANA Pacemaker Scale-out - Stop HANA on both nodes"
+          when:
+                                       - ansible_hostname in [ primary_instance_name , secondary_instance_name ]
+          ansible.builtin.include_tasks:
+            file:                      ../../../roles-misc/0.4-helpers/tasks/04.02-stop_hana.yml
+            apply:
+              environment:
+                PATH:                  /usr/bin:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                HOME:                  /usr/sap/{{ db_sid | upper }}/home
+                DIR_LIBRARY:           /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                LD_LIBRARY_PATH:       /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                SAPSYSTEMNAME:         "{{ db_sid | upper }}"
+          vars:
+            allow_world_readable_tmpfiles: true
+
+        - name:                        "5.8 HANA Pacemaker Scale-out - Copy Python hooks from /usr/share/SAPHanaSR-ScaleOut/ to /hana/shared/myHooks/ (RHEL)"
+          ansible.builtin.copy:
+            src:                       /usr/share/SAPHanaSR-ScaleOut/{{ item }}
+            dest:                      /hana/shared/myHooks/
+            remote_src:                true
+            owner:                     root
+            group:                     root      # TODO - check the correct group once the python hook package is installed
+            mode:                      '0644'
+          loop:
+            - SAPHanaSR.py
+            - ChkSrv.py
+          when: not my_hooks_stat.stat.exists
+
+        - name:                        "5.8 HANA Pacemaker Scale-out - Change ownership of the directory"
+          become:                      true
+          become_user:                 root
+          ansible.builtin.file:
+            path:                      /hana/shared/myHooks
+            state:                     directory
+            recurse:                   true
+            owner:                     "{{ db_sid | lower }}adm"
+            group:                     sapsys
+
+        - name:                        "5.8 HANA Pacemaker Scale-out - Prepare global.ini for host name resolution"
+          community.general.ini_file:
+            path:                      "/hana/shared/{{ db_sid | upper }}/global/hdb/custom/config/global.ini"
+            section:                   "system_replication_hostname_resolution"
+            mode:                      0644
+            state:                     present
+            option:                    "{{ hostvars[item].ansible_host }}"
+            value:                     "{{ hostvars[item].virtual_host }}"
+          with_items:
+            - "{{ groups[(sap_sid | upper)~'_DB' ] }}"
+
+        - name:                        "5.8 HANA Pacemaker Scale-out - Adjust global.ini on each cluster node ( RHEL without susChkSrv/susTkOver )"
+          when:
+                                       - ansible_hostname == primary_instance_name or ansible_hostname == secondary_instance_name
+          ansible.builtin.blockinfile:
+            path:                      /hana/shared/{{ db_sid | upper }}/global/hdb/custom/config/global.ini
+            block: |
+                                       [ha_dr_provider_SAPHanaSR]
+                                       provider = SAPHanaSR
+                                       path = {{ saphanasr_provider_path }}
+                                       execution_order = 1
+
+                                       [ha_dr_provider_chksrv]
+                                       provider = ChkSrv
+                                       path = {{ saphanasr_provider_path }}
+                                       execution_order = 2
+                                       action_on_lost = kill
+
+                                       [trace]
+                                       ha_dr_saphanasr = info
+                                       ha_dr_chksrv = info
+
+        # Ref: https://learn.microsoft.com/en-us/azure/sap/workloads/sap-hana-high-availability-scale-out-hsr-rhel?tabs=lb-portal#create-sap-hana-cluster-resources
+        - name:                        "5.8 HANA Pacemaker Scale-out - Create sudoers file for /etc/sudoers.d/20-saphana for RHEL"
+          ansible.builtin.template:
+            src:                       "20-saphana-rhel.j2"
+            dest:                      "/etc/sudoers.d/20-saphana"
+            mode:                      "0440"
+            owner:                     root
+            group:                     root
+            # validate:                          /usr/sbin/visudo -cf %s
+
+        - name:                        "5.8 HANA Pacemaker Scale-out - Execute HANA StartSystem on both sites"
+          when:                        ansible_hostname in [ primary_instance_name , secondary_instance_name ]
+          become_user:                 "{{ db_sid | lower }}adm"
+          become:                      true
+          ansible.builtin.command:     "{{ sapcontrol_command }} -function StartSystem"
+          failed_when:                 false
+          changed_when:                false
+          register:                    hana_system_started
+
+        - name:                        "5.8 HANA Pacemaker Scale-out - Start HANA on both nodes"
+          when:
+                                       - ansible_hostname in [ primary_instance_name , secondary_instance_name ]
+          ansible.builtin.include_tasks:
+            file:                        ../../../roles-misc/0.4-helpers/tasks/04.01-start_hana.yml
+            apply:
+              environment:
+                PATH:                    /usr/bin:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                HOME:                    /usr/sap/{{ db_sid | upper }}/home
+                DIR_LIBRARY:             /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                LD_LIBRARY_PATH:         /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+                SAPSYSTEMNAME:           "{{ db_sid | upper }}"
+          vars:
+            allow_world_readable_tmpfiles: true
+
+# # REDHAT only
+# # This needs to be run on all the nodes where HANA is deployed.
+    - name:                            Verify that the hook script is working as expected (REDHAT)"
+      when:
+                                       - ansible_hostname == primary_instance_name
+      block:
+        - name:                        "5.8 HANA Pacemaker Scale-out - Verify the hook Installation (REDHAT)"
+          become_user:                 "{{ db_sid | lower }}adm"
+          become:                      true
+          ansible.builtin.shell: |
+                                       set -o pipefail
+                                       awk '/ha_dr_SAPHanaSR.*crm_attribute/ \
+                                       { printf "%s %s %s %s\n",$2,$3,$5,$16 }' nameserver_*
+          args:
+            chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/{{ hostvars[primary_instance_name].virtual_host }}/trace
+          register:                    saphanasr
+          until:                       saphanasr.stdout is search("SOK")
+          retries:                     "{{ hsr_replication_retry_count }}"
+          delay:                       "{{ hsr_replication_retry_delay }}"
+      rescue:
+        - name:                        "[Rescue] 5.8 HANA Pacemaker Scale-out - Reload HA Provides"
+          become_user:                 "{{ db_sid | lower }}adm"
+          become:                      true
+          ansible.builtin.shell:       hdbnsutil -reloadHADRProviders
+          register:                    saphanasr_reload
+          failed_when:                 saphanasr_reload.rc != 0
+          args:
+            chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+
+        - name:                        "[Rescue] 5.8 HANA Pacemaker Scale-out - Pause to give HANA replication time to stabilize"
+          ansible.builtin.wait_for:
+            timeout:                   "{{ rescue_hsr_status_report_wait_in_s }}"
+
+        - name:                        "[Rescue] 5.8 HANA Pacemaker Scale-out - Verify the hook Installation (REDHAT)"
+          become_user:                 "{{ db_sid | lower }}adm"
+          become:                      true
+          ansible.builtin.shell: |
+                                       set -o pipefail
+                                       awk '/ha_dr_SAPHanaSR.*crm_attribute/ \
+                                       { printf "%s %s %s %s\n",$2,$3,$5,$16 }' nameserver_*
+          args:
+            chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/{{ hostvars[primary_instance_name].virtual_host }}/trace
+          register:                    saphanasr
+          until:                       saphanasr.stdout is search("SOK")
+          retries:                     "{{ hsr_replication_retry_count }}"
+          delay:                       "{{ hsr_replication_retry_delay }}"
+      always:
+        - name:                        "5.8 HANA Pacemaker Scale-out - Clear the failed state of hosts (REDHAT)"
+          ansible.builtin.meta:        clear_host_errors
+
+    - name:                            "5.8 HANA Pacemaker Scale-out - Verify the hook Installation"
+      ansible.builtin.debug:
+        var:                           saphanasr
+        verbosity:                     2
+
+    - name:                            "5.8 HANA Pacemaker Scale-out - Clear the failed state of hosts"
+      ansible.builtin.meta:            clear_host_errors
+
+
+# Note: We do not configure Hook on Majority maker, only installation is needed. Unfortunately since this task runs on HANA VM's only, Majority maker is skipped.
+# Hook packages are deployed on Majority maker in task 1.18-scaleout-pacemaker
+
+# /*---------------------------------------------------------------------------8
+# |  RHEL ANGI hook configuration for scale-out (sap-hana-ha package)          |
+# |  Identical hook config to scale-up, per RHEL docs Chapter 5                |
+# +------------------------------------4--------------------------------------*/
+
+- name:                                "5.8 HANA Pacemaker Scale-out - Implement the RHEL ANGI HA/DR provider hooks on RHEL 9.4+"
+  when:
+                                       - node_tier == 'hana'
+                                       - hdb_version[0:2] == "2."
+                                       - database_high_availability
+                                       - use_hanasr_angi | default(false)
+                                       - is_certified_for_hanasr_angi | default(false)
+                                       - ansible_os_family | upper == "REDHAT"
+  block:
+    - name:                            "5.8 HANA Pacemaker Scale-out - Display RHEL ANGI validation summary"
+      ansible.builtin.debug:
+        msg: |
+                                       HANA Scale-out and RHEL ANGI Hook Requirements Validation Summary:
+
+                                       Current System State:
+                                       - HANA Version:                    {{ hdb_version }}
+                                       - sap-hana-ha Version:             {{ saphanaSR_angi_version }}
+                                       - RHEL Version:                    {{ ansible_distribution_version }}
+
+    - name:                            "5.8 HANA Pacemaker Scale-out - Configure global.ini for host name resolution [RHEL ANGI]"
       community.general.ini_file:
         path:                          "/hana/shared/{{ db_sid | upper }}/global/hdb/custom/config/global.ini"
         section:                       "system_replication_hostname_resolution"
@@ -112,95 +289,108 @@
       with_items:
         - "{{ groups[(sap_sid | upper)~'_DB' ] }}"
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Adjust global.ini on each cluster node ( RHEL without susChkSrv/susTkOver )"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Execute HANA StopSystem on both sites [RHEL ANGI]"
+      when:                            ansible_hostname in [ primary_instance_name , secondary_instance_name ]
+      become_user:                     "{{ db_sid | lower }}adm"
+      become:                          true
+      ansible.builtin.command:         "{{ sapcontrol_command }} -function StopSystem {{ db_sid | upper }}"
+      failed_when:                     false
+      changed_when:                    false
+      register:                        hana_system_stopped
+
+    - name:                            "5.8 HANA Pacemaker Scale-out - Stop HANA on both nodes [RHEL ANGI]"
+      when:
+                                       - ansible_hostname in [ primary_instance_name , secondary_instance_name ]
+      ansible.builtin.include_tasks:
+        file:                          ../../../roles-misc/0.4-helpers/tasks/04.02-stop_hana.yml
+        apply:
+          environment:
+            PATH:                      /usr/bin:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+            HOME:                      /usr/sap/{{ db_sid | upper }}/home
+            DIR_LIBRARY:               /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+            LD_LIBRARY_PATH:           /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+            SAPSYSTEMNAME:             "{{ db_sid | upper }}"
+      vars:
+        allow_world_readable_tmpfiles: true
+
+    - name:                            "5.8 HANA Pacemaker Scale-out - Adjust global.ini on each cluster node [RHEL ANGI]"
+      when:
+                                       - ansible_hostname == primary_instance_name or ansible_hostname == secondary_instance_name
       ansible.builtin.blockinfile:
         path:                          /hana/shared/{{ db_sid | upper }}/global/hdb/custom/config/global.ini
         block: |
-                                       [ha_dr_provider_SAPHanaSR]
-                                       provider = SAPHanaSR
-                                       path = /hana/shared/myHooks
+                                       [ha_dr_provider_hanasr]
+                                       provider = HanaSR
+                                       path = /usr/share/sap-hana-ha/
                                        execution_order = 1
 
                                        [ha_dr_provider_chksrv]
                                        provider = ChkSrv
-                                       path = /hana/shared/myHooks
+                                       path = /usr/share/sap-hana-ha/
                                        execution_order = 2
-                                       action_on_lost = kill
+                                       action_on_lost = fence
 
                                        [trace]
-                                       ha_dr_saphanasr = info
+                                       ha_dr_hanasr = info
                                        ha_dr_chksrv = info
-      when:
-        - ansible_hostname == primary_instance_name or ansible_hostname == secondary_instance_name
 
-    # Ref: https://learn.microsoft.com/en-us/azure/sap/workloads/sap-hana-high-availability-scale-out-hsr-rhel?tabs=lb-portal#create-sap-hana-cluster-resources
-    - name:                            "5.8 HANA Pacemaker Scaleout - Create sudoers file for /etc/sudoers.d/20-saphana for RHEL"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Create sudoers file for RHEL ANGI"
       ansible.builtin.template:
-        src:                           "20-saphana-rhel.j2"
+        src:                           "20-saphana-rhel-angi.j2"
         dest:                          "/etc/sudoers.d/20-saphana"
         mode:                          "0440"
         owner:                         root
         group:                         root
-        # validate:                          /usr/sbin/visudo -cf %s
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Start HANA System on both nodes"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Execute HANA StartSystem on both sites [RHEL ANGI]"
+      when:                            ansible_hostname in [ primary_instance_name , secondary_instance_name ]
       become_user:                     "{{ db_sid | lower }}adm"
       become:                          true
-      ansible.builtin.command:         "{{ sapcontrol_command }}  -function StartSystem"
+      ansible.builtin.command:         "{{ sapcontrol_command }} -function StartSystem"
       failed_when:                     false
       changed_when:                    false
       register:                        hana_system_started
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Wait for SAP system to start"
-      ansible.builtin.debug:
-        msg:                           "5.8 HANA Pacemaker Scaleout - Wait {{ hana_scaleout_wait_for_start_in_sec }} seconds for SAP system to start"
-
-    - name:                            "5.8 HANA Pacemaker Scaleout - Wait for SAP system to start"
-      ansible.builtin.wait_for:
-        timeout:                       "{{ hana_scaleout_wait_for_start_in_sec }}"
-
-# REDHAT only
-# This needs to be run on all the nodes where HANA is deployed.
-    - name:                            Verify that the hook script is working as expected (REDHAT)"
+    - name:                            "5.8 HANA Pacemaker Scale-out - Start HANA on both nodes [RHEL ANGI]"
       when:
-      - ansible_hostname == primary_instance_name
+                                       - ansible_hostname in [ primary_instance_name , secondary_instance_name ]
+      ansible.builtin.include_tasks:
+        file:                          ../../../roles-misc/0.4-helpers/tasks/04.01-start_hana.yml
+        apply:
+          environment:
+            PATH:                      /usr/bin:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}:/usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+            HOME:                      /usr/sap/{{ db_sid | upper }}/home
+            DIR_LIBRARY:               /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+            LD_LIBRARY_PATH:           /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+            SAPSYSTEMNAME:             "{{ db_sid | upper }}"
+      vars:
+        allow_world_readable_tmpfiles: true
+
+    - name:                            "5.8 HANA Pacemaker Scale-out - Pause to give HANA replication time to stabilize [RHEL ANGI]"
+      ansible.builtin.wait_for:
+        timeout:                       "{{ hsr_status_report_wait_in_s }}"
+
+    - name:                            "5.8 HANA Pacemaker Scale-out - Verify RHEL ANGI hook configuration"
+      when:                            ansible_hostname == primary_instance_name
       block:
-        - name:                        "5.8 HANA Pacemaker Scaleout - Verify the hook Installation (REDHAT)"
+        - name:                        "5.8 HANA Pacemaker Scale-out - Run shared hook verification [RHEL ANGI]"
+          ansible.builtin.include_tasks: ../../../roles-misc/0.4-helpers/tasks/04.04-angi-hook-verify.yml
+      rescue:
+        - name:                        "[Rescue] 5.8 HANA Pacemaker Scale-out - Reload HA Providers [RHEL ANGI]"
           become_user:                 "{{ db_sid | lower }}adm"
           become:                      true
-          ansible.builtin.shell: |
-                                       set -o pipefail
-                                       awk '/ha_dr_SAPHanaSR.*crm_attribute/ \
-                                       { printf "%s %s %s %s\n",$2,$3,$5,$16 }' nameserver_*
+          ansible.builtin.shell:       hdbnsutil -reloadHADRProviders
+          register:                    saphanasr_reload
+          failed_when:                 saphanasr_reload.rc != 0
           args:
-            chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/{{ hostvars[primary_instance_name].virtual_host }}/trace
-          register:                    saphanasr
-          until:                       saphanasr.stdout is search("SOK")
-          retries:                     10
-          delay:                       30
-      rescue:
-        - name:                        "[Rescue] 5.8 HANA Pacemaker Scaleout - Pause to give HANA replication time to stabilize"
+            chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/exe
+
+        - name:                        "[Rescue] 5.8 HANA Pacemaker Scale-out - Pause to give HANA replication time to stabilize [RHEL ANGI]"
           ansible.builtin.wait_for:
             timeout:                   "{{ rescue_hsr_status_report_wait_in_s }}"
 
-        - name:                        "[Rescue] 5.8 HANA Pacemaker Scaleout - Verify the hook Installation (REDHAT)"
-          become_user:                 "{{ db_sid | lower }}adm"
-          become:                      true
-          ansible.builtin.shell: |
-                                       set -o pipefail
-                                       awk '/ha_dr_SAPHanaSR.*crm_attribute/ \
-                                       { printf "%s %s %s %s\n",$2,$3,$5,$16 }' nameserver_*
-          args:
-            chdir:                     /usr/sap/{{ db_sid | upper }}/HDB{{ db_instance_number }}/{{ hostvars[primary_instance_name].virtual_host }}/trace
-          register:                    saphanasr
-          until:                       saphanasr.stdout is search("SOK")
-          retries:                     10
-          delay:                       30
+        - name:                        "[Rescue] 5.8 HANA Pacemaker Scale-out - Retry shared hook verification [RHEL ANGI]"
+          ansible.builtin.include_tasks: ../../../roles-misc/0.4-helpers/tasks/04.04-angi-hook-verify.yml
 
-    - name:                            "5.8 HANA Pacemaker Scaleout - Verify the hook Installation"
-      ansible.builtin.debug:
-        var:                           saphanasr
-        verbosity:                     2
-
-# Note: We do not configure Hook on Majority maker, only installation is needed. Unfortunately since this task runs on HANA VM's only, Majority maker is skipped.
-# Hook packages are deployed on Majority maker in task 1.18-scaleout-pacemaker
+    - name:                            "5.8 HANA Pacemaker Scale-out - Clear the failed state of hosts [RHEL ANGI]"
+      ansible.builtin.meta:            clear_host_errors

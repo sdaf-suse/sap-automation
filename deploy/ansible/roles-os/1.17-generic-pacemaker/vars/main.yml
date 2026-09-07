@@ -12,6 +12,7 @@
 # |  They may be overridden, if required, but normally are not                 |
 # |                                                                           |
 # +------------------------------------4--------------------------------------*/
+pacemaker_start_delay:               "{{ '216' if ansible_os_family | upper == 'SUSE' else '186' }}"
 
 cluster_totem:
   token:                               30000
@@ -63,12 +64,13 @@ sbdMap: []
 # RHEL 8.6: resource-agents-4.9.0-16.9
 # RHEL 8.8 and newer: resource-agents-4.9.0-40.1
 # RHEL 9.0 and newer: resource-agents-cloud-4.10.0-34.2
+# RHEL 10.0 and newer: resource-agents-cloud-4.16.0
 # SLES
-# SLES 12 SP5: resource-agents-4.3.018.a7fb5035-3.98.1
-# SLES 15 SP1: resource-agents-4.3.0184.6ee15eb2-150100.4.72.1
-# SLES 15 SP2: resource-agents-4.4.0+git57.70549516-150200.3.56.1
-# SLES 15 SP3: resource-agents-4.8.0+git30.d0077df0-150300.8.31.1
-# SLES 15 SP4 and newer: resource-agents-4.10.0+git40.0f4de473-150400.3.19.1
+# SUSE 12 SP5: resource-agents-4.3.018.a7fb5035-3.98.1
+# SUSE 15 SP1: resource-agents-4.3.0184.6ee15eb2-150100.4.72.1
+# SUSE 15 SP2: resource-agents-4.4.0+git57.70549516-150200.3.56.1
+# SUSE 15 SP3: resource-agents-4.8.0+git30.d0077df0-150300.8.31.1
+# SUSE 15 SP4 and newer: resource-agents-4.10.0+git40.0f4de473-150400.3.19.1
 # todo: Figure out a way to get the release information from the package manager
 package_versions:
   redhat8.2:
@@ -98,6 +100,12 @@ package_versions:
   redhat9.4:
     - {name: "pacemaker",               version: "2.0.5",   compare_operator: ">=", version_type: "loose"}
     - {name: "resource-agents-cloud",   version: "4.10.0",  compare_operator: ">=", version_type: "loose"}
+  redhat9.6:
+    - {name: "pacemaker",               version: "2.0.5",   compare_operator: ">=", version_type: "loose"}
+    - {name: "resource-agents-cloud",   version: "4.10.0",  compare_operator: ">=", version_type: "loose"}
+  redhat10.0:
+    - {name: "pacemaker",               version: "3.0.0",   compare_operator: ">=", version_type: "loose"}
+    - {name: "resource-agents-cloud",   version: "4.16.0",  compare_operator: ">=", version_type: "loose"}
   sles_sap12.5:
     - {name: "pacemaker",               version: "1.1.23",  compare_operator: ">=", version_type: "loose"}
     - {name: "resource-agents",         version: "4.3.018", compare_operator: ">=", version_type: "loose"}
@@ -122,3 +130,7 @@ package_versions:
   sles_sap15.7:
     - {name: "pacemaker",               version: "1.1.23",  compare_operator: ">=", version_type: "loose"}
     - {name: "resource-agents",         version: "4.10.0",  compare_operator: ">=", version_type: "semver"}
+  sles_sap16.0:
+    - {name: "pacemaker",               version: "3.0.0",   compare_operator: ">=", version_type: "loose"}
+    - {name: "resource-agents",         version: "4.10.0",  compare_operator: ">=", version_type: "loose"}
+    - {name: "fence-agents-azure-arm",  version: "4.10.0",  compare_operator: ">=", version_type: "loose"}

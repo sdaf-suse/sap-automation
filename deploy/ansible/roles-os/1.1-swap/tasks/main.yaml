@@ -14,15 +14,15 @@
 # -------------------------------------+---------------------------------------8
 
 
-- name:                                "1.1 Swap: - Ensure /mnt/resource directory exists"
+- name:                                "1.1 Swap - Ensure /mnt/resource directory exists"
   ansible.builtin.file:
     path:                              "/mnt/resource"
     state:                             directory
     mode:                              "0755"
   notify:
-    - Restart waagent
+    - "1.1 Swap - Restart waagent"
 
-# - name:                                "1.1 Swap: - Update WAAgent on {{ ansible_os_family }}"
+# - name:                                "1.1 Swap - Update WAAgent on {{ ansible_os_family }}"
 #   ansible.builtin.dnf:
 #     name:                              WALinuxAgent
 #     state:                             latest
@@ -32,7 +32,7 @@
 #   tags:
 #     - skip_ansible_lint
 
-# - name:                                "1.1 Swap: - Update WAAgent on {{ ansible_os_family }}"
+# - name:                                "1.1 Swap - Update WAAgent on {{ ansible_os_family }}"
 #   community.general.zypper:
 #     name:                              WALinuxAgent
 #     state:                             latest
@@ -43,39 +43,274 @@
 #   tags:
 #     - skip_ansible_lint
 
-- name:                                "1.1 Swap: - Restart WAAgent on {{ distro_name }}"
+- name:                                "1.1 Swap - Restart WAAgent on {{ distribution_id }}"
   ansible.builtin.service:
     name:                              waagent
     state:                             restarted
 
 # Check the current swap size
-- name:                                "check swap size"
+- name:                                "1.1 Swap - Check swap size"
   ansible.builtin.shell:               set -o pipefail && cat /proc/meminfo | grep SwapTotal
   register:                            swap_space
 
-- name:                                "SWAP space from /proc/meminfo"
+- name:                                "1.1 Swap - Show SWAP space from /proc/meminfo"
   ansible.builtin.debug:
     msg:                               "SWAP size from procinfo: {{ swap_space }}"
     verbosity:                         2
 
-- name:                                "Trim Swap space"
+- name:                                "1.1 Swap - Store SWAP space value"
   ansible.builtin.set_fact:
     swap_value:                        "{{ swap_space.stdout_lines[0] | regex_search('([0-9]+)') }}"
 
-- name:                                "Swap space in Integer"
+- name:                                "1.1 Swap - Convert Swap space to Integer"
   ansible.builtin.set_fact:
     swap_size:                         "{{ swap_value | int }}"
 
-- name:                                "SWAP size"
+- name:                                "1.1 Swap - Show SWAP size"
   ansible.builtin.debug:
     msg:                               "Swap size: {{ swap_size }}"
+    verbosity:                         2
 
-- name:                                "1.1 Swap: - Check for (waagent_conf)"
+- name:                                "1.1 Swap - Detect NVMe device count for swap helper"
+  ansible.builtin.shell:               set -o pipefail && lsblk -dn -o NAME,TYPE | awk '$2 == "disk" && $1 ~ /^nvme/ {count++} END {print count + 0}'
+  args:
+    executable:                        /bin/bash
+  register:                            nvme_device_probe
+  changed_when:                        false
+  failed_when:                         false
+
+- name:                                "1.1 Swap - Store NVMe device count"
+  ansible.builtin.set_fact:
+    nvme_device_count:                 "{{ nvme_device_probe.stdout | trim | int }}"
+
+- name:                                "1.1 Swap - Detect Microsoft NVMe Direct disk count from sysfs/udev"
+  ansible.builtin.shell: |
+                                       set -o pipefail
+                                       direct_count=0
+                                       while read -r device_name; do
+                                         [ -n "$device_name" ] || continue
+                                         model_file="/sys/class/block/${device_name}/device/model"
+                                         if [ -e "$model_file" ] && grep -Eq "MSFT NVMe Accelerator|Microsoft NVMe Direct Disk" "$model_file"; then
+                                           direct_count=$((direct_count + 1))
+                                           continue
+                                         fi
+
+                                         if command -v udevadm >/dev/null 2>&1 && \
+                                            udevadm info --query=property --name="/dev/${device_name}" 2>/dev/null | \
+                                            grep -Eq "^ID_MODEL=(MSFT NVMe Accelerator|Microsoft NVMe Direct Disk)"; then
+                                           direct_count=$((direct_count + 1))
+                                         fi
+                                       done < <(lsblk -dn -o NAME,TYPE | awk '$2 == "disk" && $1 ~ /^nvme/ {print $1}')
+                                       echo "$direct_count"
+  args:
+    executable:                        /bin/bash
+  register:                            nvme_direct_probe
+  changed_when:                        false
+  failed_when:                         false
+  when:
+    - nvme_device_count | int > 0
+
+- name:                                "1.1 Swap - Store Microsoft NVMe Direct disk count"
+  ansible.builtin.set_fact:
+    nvme_direct_count:                 "{{ (nvme_direct_probe.stdout | default('0') | trim | int) if (nvme_device_count | int > 0) else 0 }}"
+
+- name:                                "1.1 Swap - Show NVMe detection summary"
+  ansible.builtin.debug:
+    msg:
+      - "use_nvme_disks: {{ use_nvme_disks | default(false) }}"
+      - "swap_size: {{ swap_size | int }}"
+      - "nvme_device_count: {{ nvme_device_count | int }}"
+      - "nvme_direct_count: {{ nvme_direct_count | int }}"
+    verbosity:                         2
+
+- name:                                "1.1 Swap - Skip NVMe helper when no NVMe devices are detected"
+  ansible.builtin.debug:
+    msg:                               "Skipping azure-nvme-swap-conf: no NVMe devices detected (mixed NVMe/SCSI presentation possible)."
+    verbosity:                         1
+  when:
+    - use_nvme_disks | default(false) | bool
+    - swap_size | int == 0
+    - nvme_device_count | int == 0
+
+- name:                                "1.1 Swap - Skip NVMe helper when no Microsoft NVMe Direct disks are detected"
+  ansible.builtin.debug:
+    msg:                               "Skipping azure-nvme-swap-conf: NVMe devices exist but no Microsoft NVMe Direct disks were detected."
+    verbosity:                         1
+  when:
+    - use_nvme_disks | default(false) | bool
+    - swap_size | int == 0
+    - nvme_device_count | int > 0
+    - nvme_direct_count | int == 0
+
+- name:                                "1.1 Swap - Configure NVMe VMs for Swap"
+  when:
+    - use_nvme_disks | default(false) | bool
+    - swap_size | int == 0
+    - nvme_device_count | int > 0
+    - nvme_direct_count | int > 0
+  block:
+    # Fail fast on malformed input: the mount point is written verbatim to
+    # /etc/fstab by the helper script, so certain characters can cause issues.
+    # fstab decodes backslash-octal escapes (e.g. "\040" -> space), so a value
+    # containing a literal backslash can pass a basic whitespace check yet still
+    # resolve to a different, unintended path. Mount paths are also used in
+    # regex patterns in the per-boot script, where metacharacters like '[' or
+    # ']' would break pattern matching. Rather than trying to enumerate every
+    # fstab-unsafe character, allow only a conservative set of characters
+    # known to be safe in both fstab and regex contexts.
+    - name:                            "1.1 Swap - Validate NVMe swap configuration variables"
+      ansible.builtin.assert:
+        that:
+          - nvme_swap_mount_point is match('^/[A-Za-z0-9._/-]+\Z')
+          - nvme_swap_filesystem == 'ext4'
+        fail_msg: >-
+          nvme_swap_mount_point must be an absolute path containing only
+          letters, digits, '.', '_', '-', and '/'
+          (got '{{ nvme_swap_mount_point }}'), and nvme_swap_filesystem must
+          be ext4
+          (got '{{ nvme_swap_filesystem }}').
+
+    # Install required dependencies for the NVMe swap helper script
+    - name:                            "1.1 Swap - Install NVMe swap dependencies (RHEL)"
+      when:                            ansible_os_family | upper == "REDHAT"
+      ansible.builtin.dnf:
+        name:
+          - nvme-cli
+          - mdadm
+          - gdisk
+        state:                         present
+        disablerepo:                   "epel*"
+        skip_broken:                   true
+        nobest:                        true
+
+    - name:                            "1.1 Swap - Install NVMe swap dependencies (SUSE)"
+      when:                            ansible_os_family | upper == "SUSE"
+      ansible.builtin.package:
+        name:
+          - nvme-cli
+          - mdadm
+          - gdisk
+        state:                         present
+      environment:
+        ZYPP_LOCK_TIMEOUT:             "20"
+
+    # copy nvme disk config script for temporary disks
+    - name:                            "1.1 Swap - Create Azure NVMe temp disk configuration helper script"
+      ansible.builtin.copy:
+        src:                           88-azure-nvme-swap-conf
+        dest:                          /usr/local/bin/azure-nvme-swap-conf
+        mode:                          '0755'
+        owner:                         root
+        group:                         root
+        force:                         true
+      register:                        helper_script_created
+
+    # touch /etc/mdadm/mdadm.conf to avoid errors in the script
+    - name:                            "1.1 Swap - Ensure /etc/mdadm directory exists"
+      ansible.builtin.file:
+        path:                          /etc/mdadm
+        state:                         directory
+        mode:                          '0755'
+
+    - name:                            "1.1 Swap - Ensure /etc/mdadm/mdadm.conf exists"
+      ansible.builtin.file:
+        path:                          /etc/mdadm/mdadm.conf
+        mode:                          '0644'
+        state:                         touch
+      when:                            helper_script_created is changed
+
+    # Ensure the configured mount point exists (recursively), so a nested
+    # override such as /srv/sap/temp doesn't fail the helper script or the
+    # per-boot recovery script's non-recursive mkdir. standard parent
+    # directory permissions apply, typically '0755', allowing traversal
+    # and listing by all users.
+    - name:                            "1.1 Swap - Ensure configured NVMe swap mount point directory exists"
+      ansible.builtin.file:
+        path:                          "{{ nvme_swap_mount_point }}"
+        state:                         directory
+        mode:                          "0755"
+
+    # run the nvme disk config script
+    # argv is used instead of a free-form string so that special
+    # characters in nvme_swap_mount_point (spaces, quotes) can't split
+    # across arguments or break the shell-like command parser.
+    - name:                            "1.1 Swap - Run Azure NVMe temp disk configuration helper script"
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/azure-nvme-swap-conf
+          - "{{ nvme_swap_filesystem }}"
+          - "{{ nvme_swap_mount_point }}"
+      register:                        nvme_swap_configured
+      changed_when:                    nvme_swap_configured.rc == 0 and "'Skipping' not in nvme_swap_configured.stdout"
+      failed_when:                     nvme_swap_configured.rc != 0 and 'No NVMe Direct Disks found' not in ((nvme_swap_configured.stdout | default('')) ~ ' ' ~ (nvme_swap_configured.stderr | default(''))) and 'Found 0 NVMe Direct Disks' not in ((nvme_swap_configured.stdout | default('')) ~ ' ' ~ (nvme_swap_configured.stderr | default('')))
+
+    - name:                            "1.1 Swap - Show Azure NVMe temp disk configuration helper script output"
+      ansible.builtin.debug:
+        msg:
+          - "rc: {{ nvme_swap_configured.rc }}"
+          - "stdout: {{ nvme_swap_configured.stdout | default('') }}"
+          - "stderr: {{ nvme_swap_configured.stderr | default('') }}"
+        verbosity:                     2
+
+    # Create swap file on the NVMe temp disk mount
+    # waagent cannot manage swap on NVMe VMs (ResourceDiskError: unable to detect disk topology)
+    # so we create the swap file explicitly
+    - name:                            "1.1 Swap - Copy NVMe swap creation script"
+      ansible.builtin.copy:
+        src:                           create-nvme-swap.sh
+        dest:                          /usr/local/bin/create-nvme-swap.sh
+        mode:                          '0755'
+        owner:                         root
+        group:                         root
+        force:                         true
+
+    # Only create the swap file when the helper actually configured (or
+    # verified) the NVMe RAID0 array. The failed_when above tolerates a
+    # "No NVMe Direct Disks found"/"Found 0 NVMe Direct Disks" rc!=0 result
+    # so the play doesn't abort, but that means the mount point (created
+    # unconditionally above) is still just a directory on its parent
+    # filesystem. Without this guard, create-nvme-swap.sh would allocate
+    # and activate swap there instead - potentially filling the OS/data
+    # disk - so gate this task on a genuinely successful helper run.
+    - name:                            "1.1 Swap - Create swap file on NVMe temp disk"
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/create-nvme-swap.sh
+          - "{{ swap_size_mb }}"
+          - "{{ nvme_swap_mount_point }}"
+      vars:
+        swap_size_mb:                  "{{ (sap_swap | selectattr('tier', 'search', node_tier) | list | first).swap_size_mb }}"
+      register:                        nvme_swap_file_created
+      changed_when:                    "'already exists' not in nvme_swap_file_created.stdout"
+      when:                            nvme_swap_configured.rc == 0
+
+    # Deploy a cloud-init per-boot script to recreate swap after VM restarts
+    # NVMe temp disk data is lost on stop/deallocate; the RAID0 config persists
+    # in initramfs but the swap file needs to be recreated
+    - name:                            "1.1 Swap - Ensure cloud-init per-boot directory exists"
+      ansible.builtin.file:
+        path:                          /var/lib/cloud/scripts/per-boot
+        state:                         directory
+        mode:                          '0755'
+
+    - name:                            "1.1 Swap - Deploy per-boot swap recreation script for NVMe"
+      ansible.builtin.template:
+        src:                           create-swap-perboot.sh.j2
+        dest:                          /var/lib/cloud/scripts/per-boot/create-swap.sh
+        mode:                          '0755'
+        owner:                         root
+        group:                         root
+      vars:
+        swap_size_mb:                  "{{ (sap_swap | selectattr('tier', 'search', node_tier) | list | first).swap_size_mb }}"
+        swap_filesystem:               "{{ nvme_swap_filesystem }}"
+        swap_mount_point:              "{{ nvme_swap_mount_point }}"
+
+- name:                                "1.1 Swap - Check for (waagent_conf)"
   ansible.builtin.stat:
     path:                              /etc/waagent.conf
   register:                            waagent_conf
 
-- name:                                "1.1 Swap: - Check for (waagent.conf.rpmsave)"
+- name:                                "1.1 Swap - Check for (waagent.conf.rpmsave)"
   become:                              true
   become_user:                         root
   ansible.builtin.stat:
@@ -96,7 +331,7 @@
   register:                            waagent_conf_copy
 
 
-- name:                                "1.1 Swap: - Force systemd to reread configs {{ distro_name }}"
+- name:                                "1.1 Swap - Force systemd to reread configuration {{ distribution_id }}"
   ansible.builtin.service:
     name:                              systemd
     state:                             reloaded
@@ -104,7 +339,7 @@
     - waagent_conf_copy is defined
     - waagent_conf_copy.changed
 
-- name:                                "1.1 Swap: - Restart WAAgent on {{ distro_name }}"
+- name:                                "1.1 Swap - Restart WAAgent on {{ distribution_id }}"
   ansible.builtin.service:
     name:                              waagent
     state:                             restarted
@@ -112,7 +347,7 @@
     - waagent_conf_copy is defined
     - waagent_conf_copy.changed
 
-- name:                                "1.1 Swap: - Ensure waagent file is configured with proper parameters"
+- name:                                "1.1 Swap - Ensure waagent file is configured with correct parameters"
   ansible.builtin.lineinfile:
     dest:                              /etc/waagent.conf
     state:                             "{{ item.state }}"
@@ -137,77 +372,42 @@
   vars:
     swap_size_mb:                      "{{ (sap_swap | selectattr('tier', 'search', node_tier) | list | first).swap_size_mb }}"
   when:
-    - swap_size == '0'
+    - swap_size | int == 0
 
-- name:                                "1.1 Swap: - Reboot"
+- name:                                "1.1 Swap - Reboot"
   when:
-    - wagent_configuration.changed
+    - wagent_configuration is changed
   block:
 
-    - name:                            "1.1 Swap: - Reboot"
+    - name:                            "1.1 Swap - Reboot"
       become:                          true
       ansible.builtin.reboot:
         reboot_timeout:                300
         post_reboot_delay:             10
       failed_when:                     false
 
-    - name:                            "1.1 Swap: - Clear the failed state of hosts"
+    - name:                            "1.1 Swap - Clear the failed state of hosts"
       ansible.builtin.meta:            clear_host_errors
 
   # Wait for Connection after reboot
-    - name:                            "1.1 Swap: - Wait for system to become reachable"
+    - name:                            "1.1 Swap - Wait for system to become reachable"
       ansible.builtin.wait_for_connection:
         delay:                         10
         timeout:                       300
 
-
-# - name:                               "Get SWAP Size"
-#   set_fact:
-#     swap_size_mb:                      "{{ (sap_swap | selectattr('tier', 'search', node_tier) | list | first).swap_size_mb }}"
-
-# # Enable SWAP file using Cloud-init : https://learn.microsoft.com/en-us/troubleshoot/azure/virtual-machines/swap-file-not-recreated-linux-vm-restart
-# # New OS release will use Cloud-Init for Provisioning: https://learn.microsoft.com/en-us/azure/virtual-machines/linux/using-cloud-init
-# #Create SWAP configuration file at /var/lib/cloud/scripts/per-boot
-
-# # Check the current swap size
-# - name:                             "check swap size"
-#   ansible.builtin.shell:          cat /proc/meminfo |grep SwapTotal
-#   register:                         swap_space
-
-# - name:                               "SWAP space"
-#   ansible.builtin.debug:
-#         msg:                           "{{swap_space}}"
-
-# - name:                             "Trim Swap space"
-#   set_fact:
-#     swap_value:                     "{{ swap_space.stdout_lines[0] | regex_search('([0-9]+)') }}"
-
-# - name:                             "Swap space in Integer"
-#   set_fact:
-#     swap_size:                     "{{swap_value | int }}"
-
-# # - fail:
-# #     msg:       "swap value not right"
-
-# - name:                               "SWAP Enabled"
-#   ansible.builtin.debug:
-#         msg:                           "{{swap_size}}"
-
-# - name:                               "Create SWAP.sh"
-#   become:                             true
-#   become_user:                        root
-#   ansible.builtin.template:
-#     src:                              swap.j2
-#     dest:                             "/var/lib/cloud/scripts/per-boot/create_swapfile.sh"
-#     mode:                             '0755'
-#     force:                            true
-#   when:
-#     - swap_size == '0'
-
-
-# - name:                                "Swap reboot"
-#   ansible.builtin.reboot:
-#   when:
-#     - swap_size == '0'
+    # This is a temporary workaround to ensure that systemd is fully running before we proceed with any other tasks,
+    # as the swap configuration may not be fully applied until systemd is running.
+    # This was added in response to an issue where subsequent tasks were failing due to systemd not being in a
+    # running state after the reboot.
+    - name:                            "1.1 Swap - Wait for systemd to be in a running state after reboot"
+      ansible.builtin.command:         systemctl is-system-running
+      register:                        systemd_status
+      until:                           systemd_status.stdout == "running"
+      retries:                         30
+      delay:                           10
+      failed_when:                     systemd_status.rc > 1
+      changed_when:                    false
+      tags:
+        - skip_ansible_lint
 
 ...

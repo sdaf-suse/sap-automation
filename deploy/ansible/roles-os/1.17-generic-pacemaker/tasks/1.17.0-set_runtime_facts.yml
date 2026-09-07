@@ -27,7 +27,7 @@
       Metadata:                                   true
   register:                                       azure_metadata
 
-- name:                                           "1.17 Generic Pacemaker - Show IMDS results"
+- name:                                           "1.17 Generic Pacemaker - Show Azure Instance Metadata results"
   ansible.builtin.debug:
     var:                                          azure_metadata.json
     verbosity:                                    2
@@ -59,6 +59,7 @@
       ansible.builtin.set_fact:
         fencing_spn_subscription_id:              "{{ azure_metadata.json.compute.subscriptionId }}"
         resource_group_name:                      "{{ azure_metadata.json.compute.resourceGroupName }}"
+        fencing_azure_cloud_parameter:            "{{ 'cloud=usgov' if (azure_metadata.json.compute.azEnvironment | default('') | lower) == 'azureusgovernmentcloud' else '' }}"
 
 
 # /*---------------------------------------------------------------------------8
@@ -147,7 +148,7 @@
   delay:                                          60
   until:                                          is_primIP_defined_on_secondaryNode
 
-- name:                                           "1.17 Generic Pacemaker - Extract NIC IPs"
+- name:                                           "1.17 Generic Pacemaker - Extract network interface IP addresses"
   ansible.builtin.set_fact:
     primary_instance_ip:                          "{{ hostvars[primary_instance_name]['primary_ip'] | string }}"
     secondary_instance_ip:                        "{{ hostvars[secondary_instance_name]['primary_ip'] | string }}"
@@ -189,6 +190,12 @@
     - name:                                       "1.17 Generic Pacemaker - Set SSH fact"
       ansible.builtin.set_fact:
         cluster_public_ssh_key:                   "{{ cluster_public_ssh_key.stdout }}"
+
+    - name:                                       "1.17 Generic Pacemaker - Add public key to authorized_keys for root user"
+      ansible.posix.authorized_key:
+        user:                                     root
+        key:                                      "{{ cluster_public_ssh_key }}"
+        state:                                    present
 
 
 - name:                                           "1.17 Generic Pacemaker - Wait for ssh key facts to be present"
@@ -239,16 +246,16 @@
   when:                                           ansible_os_family | upper == "REDHAT"
   ansible.builtin.debug:
     msg:
-      - "pacemaker:                               {{ ansible_facts.packages['pacemaker'] }}"
-      - "resource-agents:                         {{ ansible_facts.packages['resource-agents'] }}"
-      - "fence-agents-azure-arm:                  {{ ansible_facts.packages['fence-agents-azure-arm'] }}"
+      - "pacemaker:                               {{ ansible_facts.packages['pacemaker'][0].name }} {{ ansible_facts.packages['pacemaker'][0].version }}"
+      - "resource-agents:                         {{ ansible_facts.packages['resource-agents'][0].name }} {{ ansible_facts.packages['resource-agents'][0].version }}"
+      - "fence-agents-azure-arm:                  {{ ansible_facts.packages['fence-agents-azure-arm'][0].name }} {{ ansible_facts.packages['fence-agents-azure-arm'][0].version }}"
 
 - name:                                           "1.17 Generic Pacemaker - Show packages information ({{ ansible_os_family | upper }})"
   when:                                           ansible_os_family | upper == "SUSE"
   ansible.builtin.debug:
     msg:
-      - "pacemaker:                               {{ ansible_facts.packages['pacemaker'] }}"
-      - "resource-agents:                         {{ ansible_facts.packages['resource-agents'] }}"
+      - "pacemaker:                               {{ ansible_facts.packages['pacemaker'][0].name }} {{ ansible_facts.packages['pacemaker'][0].version }}"
+      - "resource-agents:                         {{ ansible_facts.packages['resource-agents'][0].name }} {{ ansible_facts.packages['resource-agents'][0].version }}"
 
 - name:                                           "1.17 Generic Pacemaker - Verify that the packages are the right version"
   ansible.builtin.assert:

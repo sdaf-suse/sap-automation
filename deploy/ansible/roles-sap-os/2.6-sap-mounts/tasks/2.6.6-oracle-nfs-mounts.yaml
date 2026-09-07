@@ -1,9 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-- name:                            Mount Install folder when using AFS
-  become:                              true
-  become_user:                         root
+- name:                            "2.6.6 SAP Mount - ORACLE - Mount Installation folder when using AFS"
+  become:                          true
+  become_user:                     root
   ansible.posix.mount:
     src:                           "{{ usr_sap_install_mountpoint }}/{{ bom_base_name }}"
     path:                          "{{ target_media_location }}"
@@ -15,7 +15,7 @@
     - use_AFS
 
 
-- name:                                "ORACLE: Make orasid:dba as owners"
+- name:                                "2.6.6 SAP Mount - ORACLE - Make orasid:dba as owners"
   become:                              true
   become_user:                         root
   ansible.builtin.file:
@@ -32,7 +32,7 @@
   when:
     - node_tier != "observer"
 
-- name:                                "ORACLE: Create filepermission.txt"
+- name:                                "2.6.6 SAP Mount - ORACLE - Create filepermission.txt"
   become:                              true
   become_user:                         root
   ansible.builtin.file:

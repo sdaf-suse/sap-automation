@@ -1,0 +1,223 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# /*---------------------------------------------------------------------------8
+# |                                                                            |
+# |                Perform the Oracle Instance installation                    |
+# |                  SAP: Register BOM                                         |
+# |                  create .params directory                                  |
+# |                  Export environment variables for Oracle Installation      |
+# |                  Run the Oracle universal installer in silent mode.        |
+# |                   SAP Note : 2660017 Oracle Software Installation on Unix  |
+# |                                                                            |
+# +------------------------------------4--------------------------------------*/
+
+---
+
+- name:                                "4.1.2 Oracle ASM Database - Update - Register BoM"
+  ansible.builtin.include_role:
+    name:                              roles-sap/3.3.1-bom-utility
+    tasks_from:                        bom-register
+  vars:
+    bom_name:                          "{{ bom_base_name }}"
+    task_prefix:                       "ORACLE GRID: "
+    sa_enabled:                        true
+  when:
+                                       - bom is undefined
+
+- name:                                "4.1.2 Oracle ASM Database - Update - Validate ORACLE parameters"
+  ansible.builtin.assert:
+    that:
+      - item_to_check.parameter is defined                    # Has the variable been defined
+      - item_to_check.parameter | type_debug != 'NoneType'    # and given a value
+      - item_to_check.parameter | trim | length > 1
+    fail_msg:                      item_to_check.error
+  loop:
+    - { parameter: 'bom.patch_information.ora_release', error: 'Oracle deployments requires that ora_release is provided' }
+    - { parameter: 'bom.patch_information.ora_version', error: 'Oracle deployments requires that ora_version is provided' }
+    - { parameter: 'bom.patch_information.oracle_sbp_patch', error: 'Oracle deployments requires that oracle_sbp_patch is provided' }
+  loop_control:
+    loop_var: item_to_check
+
+- name:                                "4.1.2 Oracle ASM Database - Update - Set variables from BoM"
+  ansible.builtin.set_fact:
+    ora_release:                       "{{ bom.patch_information.ora_release }}"
+    ora_version:                       "{{ bom.patch_information.ora_version }}"
+    oracle_sbp_patch:                  "{{ bom.patch_information.oracle_sbp_patch }}"
+
+- name:                                "4.1.2 Oracle ASM Database - Update - Set DB SID"
+  ansible.builtin.debug:
+    msg:
+                                       - "DB SID: {{ sap_sid | upper }}"
+                                       - "Oracle Version: {{ ora_version }}"
+                                       - "Oracle Release: {{ ora_release }}"
+                                       - "Oracle SBP Patch: {{ oracle_sbp_patch }}"
+
+- name:                                "4.1.2 Oracle ASM Database - Update - Set Runtime Variables"
+  ansible.builtin.set_fact:
+    is_UEK6:                           "{{ ansible_kernel is version('5.5', '<') }}"
+    CV_ASSUME_DISTID:                  "{{ CV_ASSUME_DISTID }}"
+
+# Step 4
+- name:                                "4.1.2 Oracle ASM Database - Pre processing reset permissions"
+  when:                                oradism_stat.stat.exists
+  ansible.builtin.file:
+    path:                              "/oracle/{{ db_sid | upper }}/{{ ora_version }}/bin/oradism"
+    state:                             file
+    mode:                              'u+rw'
+    owner:                             "{{ oracle_user_name }}"
+    group:                             oinstall
+
+# Step 5
+- name:                                "4.1.2 Oracle ASM Database - Post Processing - DB SBP Patching - progress"
+  ansible.builtin.debug:
+    msg:                               "Running SBP Patching, env ORACLE_HOME=$IHRDBMS  $IHRDBMS /MOPatch/mopatch.sh -v -s {{ target_media_location }}/SBP/{{ oracle_sbp_patch }}, please wait"
+
+- name:                                "4.1.2 Oracle ASM Database - Post Processing - SBP Patching"
+  become:                              true
+  become_user:                         "{{ oracle_user_name }}"
+  ansible.builtin.shell:               "env ORACLE_HOME=$IHRDBMS $IHRDBMS/MOPatch/mopatch.sh -v -s {{ target_media_location }}/SBP/{{ bom.patch_information.oracle_sbp_patch }} -F mopatch_patchgen"
+  environment:
+    CV_ASSUME_DISTID:                  "{{ CV_ASSUME_DISTID }}"
+    IHRDBMS :                          "/oracle/{{ db_sid | upper }}/{{ ora_version }}"
+  register:                            sbpscriptdb_results
+  failed_when:                         sbpscriptdb_results.rc >= 2
+  args:
+    creates:                           "/etc/sap_deployment_automation/oracle/grid_mopatch_db_installed.txt"
+    chdir:                             "{{ target_media_location }}/SBP"
+    executable:                        /bin/csh
+
+- name:                                "4.1.2 Oracle ASM Database - Post processing installer output"
+  ansible.builtin.debug:
+    var:                               sbpscriptdb_results.stdout_lines
+    verbosity:                         2
+
+- name:                                "4.1.2 Oracle ASM Database - Post processing installer output"
+  ansible.builtin.copy:
+    dest:                              "/etc/sap_deployment_automation/oracle/grid_mopatch_db.log"
+    content:                           "{{ sbpscriptdb_results.stdout }}"
+    mode:                              '0777'
+  when:                                sbpscriptdb_results.stdout is defined
+
+- name:                                "4.1.2 Oracle ASM Database - Create grid_mopatch_db_installed.txt"
+  ansible.builtin.file:
+    path:                              "/etc/sap_deployment_automation/oracle/grid_mopatch_db_installed.txt"
+    state:                             touch
+    mode:                              '0755'
+    owner:                             "{{ oracle_user_name }}"
+    group:                             oinstall
+
+# Step 6
+- name:                                "4.1.2 Oracle ASM Database - pre processing reset permissions"
+  when:                                oradism_stat.stat.exists
+  ansible.builtin.file:
+    path:                              "/oracle/{{ db_sid | upper }}/{{ ora_version }}/bin/oradism"
+    state:                             file
+    mode:                              '4750'
+    owner:                             "{{ oracle_user_name }}"
+    group:                             oinstall
+
+
+- name:                                "4.1.2 Oracle ASM Database - Verify Status on Primary"
+  become_user:                         "{{ oracle_user_name }}"
+  become:                              true
+  ansible.builtin.shell: |
+                                       sqlplus -S / as sysdba <<EOF
+                                       SET PAGESIZE 0 FEEDBACK OFF HEADING OFF;
+                                       SELECT database_role || ':' || open_mode FROM v\$database;
+                                       EXIT;
+                                       EOF
+
+  register:                            dg_status
+  changed_when:                        false
+  failed_when:                         false
+  args:
+    chdir:                             "/etc/sap_deployment_automation/dataguard_scripts/"
+  environment:                         "{{ oracle_env }}"
+
+- name:                                "4.1.2 Oracle ASM Database - Set status on Primary"
+  ansible.builtin.set_fact:
+    primary_mounted:                   "{{ (dg_status.stdout is search('PRIMARY:MOUNTED')) | bool }}"
+
+- name:                                "4.1.2 Oracle ASM Database - Show status on Primary"
+  ansible.builtin.debug:
+    msg:
+      - "Database instance:            {{ ansible_hostname }}"
+      - "Primary instance mounted:     {{ primary_mounted }}"
+
+- name:                                "4.1.2 Oracle ASM Database - Restart Primary instance"
+  when:
+    - not primary_mounted
+  block:
+    - name:                            "4.1.2 Oracle ASM Database - Restart Primary instance"
+      become_user:                     "{{ oracle_user_name }}"
+      become:                          true
+      ansible.builtin.shell: |
+                                       sqlplus -S / as sysdba <<EOF
+                                       SHUTDOWN;
+                                       EXIT;
+                                       EOF
+
+      register:                        db_shut_down
+      changed_when:                    false
+      failed_when:                     false
+      environment:                     "{{ oracle_env }}"
+      args:
+        chdir:                         "/etc/sap_deployment_automation/dataguard_scripts/"
+
+    - name:                            "4.1.2 Oracle ASM Database - Shutdown instance - Check for zombie standby processes"
+      ansible.builtin.shell: |
+                                       set -o pipefail
+                                       ps -ef | grep ora_pmon_{{ db_sid | upper }} | grep -v grep || true
+      become_user:                     "root"
+      become:                          true
+      register:                        standby_pmon
+      changed_when:                    false
+
+    - name:                            "4.1.2 Oracle ASM Database - Shutdown instance - Kill zombie standby processes"
+      become:                          true
+      become_user:                     root
+      ansible.builtin.shell:           kill -9 {{ item.split()[1] }}
+      loop:                            "{{ standby_pmon.stdout_lines }}"
+      when:                            standby_pmon.stdout | length > 0
+      failed_when:                     false
+
+    - name:                            "4.1.2 Oracle ASM Database - Shutdown instance - Clean orphaned shared memory segments"
+      become:                          true
+      become_user:                     root
+      ansible.builtin.shell: |
+                                       set -o pipefail
+                                       for seg in $(ipcs -m | grep {{ oracle_user_name }} | awk '$6==0 {print $2}'); do
+                                         ipcrm -m $seg
+                                       done
+      failed_when:                     false
+      when:                            standby_pmon.stdout | length > 0
+
+    - name:                            "4.1.2 Oracle ASM Database - Shutdown instance - Remove lock file"
+      become:                          true
+      become_user:                     root
+      ansible.builtin.file:
+        path:                          "/oracle/{{ db_sid | upper }}/{{ ora_version }}/dbs/ls{{ db_sid | upper }}"
+        state:                         absent
+      failed_when:                     false
+
+    - name:                            "4.1.2 Oracle ASM Database - Restart Primary instance"
+      become_user:                     "{{ oracle_user_name }}"
+      become:                          true
+      ansible.builtin.shell: |
+                                       sqlplus -S / as sysdba <<EOF
+                                       STARTUP NOMOUNT;
+                                       EXIT;
+                                       EOF
+
+      register:                        db_started
+      changed_when:                    false
+      failed_when:                     false
+      environment:                     "{{ oracle_env }}"
+      args:
+        chdir:                         "/etc/sap_deployment_automation/dataguard_scripts/"
+
+...
+# /*---------------------------------------------------------------------------8
+# |                                   END                                      |
+# +------------------------------------4--------------------------------------*/

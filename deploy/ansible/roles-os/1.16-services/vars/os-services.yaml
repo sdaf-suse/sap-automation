@@ -78,6 +78,25 @@ services:
     - { tier: 'ha',          service: 'pcsd',         node_tier: 'db2',     state: 'started'   }
     - { tier: 'ha',          service: 'pcsd',         node_tier: 'db2',     state: 'enabled'   }
 
+  redhat10:
+    - { tier: 'os',          service: 'auditd',       node_tier: 'all',     state: 'started'   }
+    - { tier: 'os',          service: 'firewalld',    node_tier: 'all',     state: 'stopped'   }
+    - { tier: 'os',          service: 'firewalld',    node_tier: 'all',     state: 'disabled'  }
+    - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'stopped'   }
+    - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'disabled'  }
+    - { tier: 'sapos',       service: 'target',       node_tier: 'iscsi',   state: 'started'   }
+    - { tier: 'sapos',       service: 'target',       node_tier: 'iscsi',   state: 'enabled'   }
+    - { tier: 'sapos',       service: 'tuned',        node_tier: 'all',     state: 'started'   }
+    - { tier: 'sapos',       service: 'tuned',        node_tier: 'all',     state: 'enabled'   }
+    - { tier: 'ha',          service: 'pcsd',         node_tier: 'hana',    state: 'started'   }
+    - { tier: 'ha',          service: 'pcsd',         node_tier: 'hana',    state: 'enabled'   }
+    - { tier: 'ha',          service: 'pcsd',         node_tier: 'scs',     state: 'started'   }
+    - { tier: 'ha',          service: 'pcsd',         node_tier: 'scs',     state: 'enabled'   }
+    - { tier: 'ha',          service: 'pcsd',         node_tier: 'ers',     state: 'started'   }
+    - { tier: 'ha',          service: 'pcsd',         node_tier: 'ers',     state: 'enabled'   }
+    - { tier: 'ha',          service: 'pcsd',         node_tier: 'db2',     state: 'started'   }
+    - { tier: 'ha',          service: 'pcsd',         node_tier: 'db2',     state: 'enabled'   }
+
   sles_sap12:
     - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'stopped'   }
     - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'disabled'  }
@@ -89,13 +108,33 @@ services:
     - { tier: 'ha',          service: 'logd',         node_tier: 'all',     state: 'started'   }
     # --------------------------- Begin - Packages required for iSCSI -----------------------------------------8
     # https://learn.microsoft.com/en-us/azure/sap/workloads/high-availability-guide-suse-pacemaker#sbd-with-an-iscsi-target-server
-    - { tier: 'iscsi',        service: 'targetcli',    node_tier: 'iscsi',   state: 'enabled'   }
-    - { tier: 'iscsi',        service: 'targetcli',    node_tier: 'iscsi',   state: 'started'   }
+    - { tier: 'iscsi',       service: 'targetcli',    node_tier: 'iscsi',   state: 'enabled'   }
+    - { tier: 'iscsi',       service: 'targetcli',    node_tier: 'iscsi',   state: 'started'   }
+    # ---------------------------- End - Packages required for iSCSI ------------------------------------------8
+
+  sles_sap16:
+    - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'stopped'   }
+    - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'disabled'  }
+    - { tier: 'os',          service: 'NetworkManager', node_tier: 'all',   state: 'started'   }
+    - { tier: 'os',          service: 'NetworkManager', node_tier: 'all',   state: 'enabled'   }
+    # --------------------------- Begin - Packages required for iSCSI -----------------------------------------8
+    # https://learn.microsoft.com/en-us/azure/sap/workloads/high-availability-guide-suse-pacemaker#sbd-with-an-iscsi-target-server
+    - { tier: 'iscsi',       service: 'targetcli',    node_tier: 'iscsi',   state: 'enabled'   }
+    - { tier: 'iscsi',       service: 'targetcli',    node_tier: 'iscsi',   state: 'started'   }
     # ---------------------------- End - Packages required for iSCSI ------------------------------------------8
 
   oraclelinux8:
     - { tier: 'os',          service: 'auditd',       node_tier: 'all',     state: 'started'   }
     - { tier: 'os',          service: 'oddjobd',      node_tier: 'all',     state: 'disabled'  }
+    - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'stopped'   }
+    - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'disabled'  }
+    - { tier: 'os',          service: 'firewalld',    node_tier: 'all',     state: 'stopped'   }
+    - { tier: 'os',          service: 'firewalld',    node_tier: 'all',     state: 'disabled'  }
+    - { tier: 'os',          service: 'waagent',      node_tier: 'all',     state: 'restarted' }  # Ensure the service is restarted and swap space is available in case the handler is not called in 1.1/swap.
+    - { tier: 'sapos',       service: 'rpcbind',      node_tier: 'scs',     state: 'restarted' }
+
+  oraclelinux9:
+    - { tier: 'os',          service: 'auditd',       node_tier: 'all',     state: 'started'   }
     - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'stopped'   }
     - { tier: 'os',          service: 'fstrim.timer', node_tier: 'all',     state: 'disabled'  }
     - { tier: 'os',          service: 'firewalld',    node_tier: 'all',     state: 'stopped'   }

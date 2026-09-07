@@ -51,14 +51,37 @@
 # ----------------------------------------
 # BEGIN
 # ----------------------------------------
+    # Build dictionary keyed by parameter name
+    # Distribution params processed last, so they override common
 
-- name:                                "1.9 Kernel parameters - Gather list of parameters which need to be applied"
+- name:                                "1.9 Kernel parameters - Build final parameter list with explicit precedence"
   ansible.builtin.set_fact:
-    get_parameters_to_apply:           '{{
-                                          (parameters["common"] +
-                                          (parameters[distribution_id] | default([]))) | unique
-                                        }}'
+    params_by_name: >-
+                                       {{
+                                         dict((common_params + distro_params) |
+                                         map(attribute='name') |
+                                         zip(common_params + distro_params))
+                                       }}
+  vars:
+    common_params: >-
+                                       {{
+                                         parameters['common'] | default([]) |
+                                         selectattr('tier', 'in', ['all', tier]) |
+                                         selectattr('node_tier', 'in', ['all', node_tier]) |
+                                         list
+                                       }}
+    distro_params: >-
+                                       {{
+                                         parameters[distribution_id] | default([]) |
+                                         selectattr('tier', 'in', ['all', tier]) |
+                                         selectattr('node_tier', 'in', ['all', node_tier]) |
+                                         list
+                                       }}
 
+
+- name:                                "1.9 Kernel parameters - Convert back to list for iteration"
+  ansible.builtin.set_fact:
+    get_parameters_to_apply:           "{{ params_by_name.values() | list }}"
 # Print Distribution ID if it is passed correctly.
 - name:                                "1.9 Kernel parameters - Display distribution_id which will be used"
   ansible.builtin.debug:
@@ -118,23 +141,28 @@
 
     - name:                            "1.9 Kernel parameters - Set limits"
       ansible.builtin.blockinfile:
-        path:                          /etc/security/limits.conf
+        path:                          /etc/security/limits.d/99-sap.conf
         insertafter:                   '#@student        -       maxlogins       4'
+        create:                        true
+        mode:                          '0644'
         state:                         present
         block: |
-                oracle     soft memlock unlimited
-                oracle     hard memlock unlimited
+                @oinstall  soft    nproc    unlimited
+                oracle     soft  memlock    unlimited
+                oracle     hard  memlock    unlimited
                 @sapsys    hard    nproc    unlimited
                 @sapsys    soft    nproc    unlimited
                 @dba       hard    nproc    unlimited
                 @dba       soft    nproc    unlimited
+
   when:
     - node_tier in ["oracle","oracle-asm","oracle-multi-sid"]
 
 - name:                                "1.9 Kernel parameters - Set limits for DB2"
   ansible.builtin.blockinfile:
-    path:                              /etc/security/limits.conf
-    insertafter:                       '#@student        -       maxlogins       4'
+    path:                              /etc/security/limits.d/99-sap-db2.conf
+    create:                            true
+    mode:                              '0644'
     state:                              present
     block: |
                 @sapsys    hard    nproc    unlimited
@@ -146,8 +174,9 @@
 
 - name:                                "1.9 Kernel parameters - Set limits for HANA"
   ansible.builtin.blockinfile:
-    path:                              /etc/security/limits.conf
-    insertafter:                       '#@student        -       maxlogins       4'
+    path:                              /etc/security/limits.d/99-sap-hana.conf
+    create:                            true
+    mode:                              '0644'
     state:                              present
     block: |
                 @sapsys    hard    nproc    unlimited
@@ -159,8 +188,9 @@
 
 - name:                                "1.9 Kernel parameters - Set limits for app tier"
   ansible.builtin.blockinfile:
-    path:                              /etc/security/limits.conf
-    insertafter:                       '#@student        -       maxlogins       4'
+    path:                              /etc/security/limits.d/99-sap-app.conf
+    create:                            true
+    mode:                              '0644'
     state:                              present
     block: |
                 @sapsys    hard    nproc    unlimited

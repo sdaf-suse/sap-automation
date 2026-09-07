@@ -28,9 +28,7 @@
                                               - "database_cluster_type:           {{ database_cluster_type }}"
                                               - "sbdDevices:                      {{ sbdDevices }}"
     verbosity:                                2
-  when:
-                                              - (database_cluster_type == "ASD")   or
-                                                (scs_cluster_type      == "ASD")
+  when:                                         cluster_stonith_type == "ASD"
 
 - name:                                       "Parameters to be used..."
   ansible.builtin.debug:
@@ -39,9 +37,7 @@
                                               - "database_cluster_type:           {{ database_cluster_type }}"
                                               - "iscsi_servers:                   {{ iscsi_servers }}"
     verbosity:                                2
-  when:
-                                              - (database_cluster_type == "ISCSI")   or
-                                                (scs_cluster_type      == "ISCSI")
+  when:                                       cluster_stonith_type == "ISCSI"
 
 
 - name:                                       "Parameters testing..."
@@ -51,9 +47,7 @@
                                               - "item.lun:                       {{ item.LUN }}"
     verbosity:                                2
   loop:                                       "{{ sbdDevices }}"
-  when:
-                                              - (database_cluster_type == "ASD")   or
-                                                (scs_cluster_type      == "ASD")
+  when:                                       cluster_stonith_type == "ASD"
 
 
 # - name:                                       "Parameters testing..."
@@ -92,8 +86,7 @@
                                                   diskById:   ''                  }
       loop:                                   "{{ sbdDevices }}"
       when:
-                                              - (database_cluster_type == "ASD")   or
-                                                (scs_cluster_type      == "ASD")
+                                              - cluster_stonith_type == "ASD"
                                               - item.host == ansible_hostname
 
     - name:                                   "ISCSI - Build SBD Dictionary"
@@ -107,19 +100,13 @@
                                                   diskByLun:  ''                ,
                                                   diskById:   ''                  }
       loop:                                   "{{ iscsi_device_map }}"
-      when:
-                                              - (database_cluster_type == "ISCSI")   or
-                                                (scs_cluster_type      == "ISCSI")
+      when:                                   cluster_stonith_type == "ISCSI"
 
     - name:                                   "SBD Dictionary..."
       ansible.builtin.debug:
         var:                                  sbdMap
         verbosity:                            2
-      when:
-                                              - (database_cluster_type == "ASD")   or
-                                                (database_cluster_type == "ISCSI") or
-                                                (scs_cluster_type      == "ASD")   or
-                                                (scs_cluster_type      == "ISCSI")
+      when:                                   cluster_stonith_type in ['ASD', 'ISCSI']
 
     - name:                                   "SBD Dictionary..."
       ansible.builtin.debug:
@@ -128,9 +115,7 @@
                                               - "item.blockDev:                  {{ item.blockDev }}"
         verbosity:                            2
       loop:                                   "{{ sbdMap }}"
-      when:
-                                              - (database_cluster_type == "ISCSI")   or
-                                                (scs_cluster_type      == "ISCSI")
+      when:                                   cluster_stonith_type == "ISCSI"
 
     # +------------------------------------
     # -------------------------------------+---------------------------------------8
@@ -178,7 +163,7 @@
         verbosity:                            2
 
     - name:                                   "Create SBD Device(s)..."
-      when:                                   sbdDumpCommand_results.rc == 1
+      when:                                   sbdDumpCommand_results.rc != 0
       run_once:                               true                                            # run on only one host in play
       block:
         - name:                               "create SBD Device(s)..."
@@ -221,7 +206,6 @@
       loop:
         - { regexp: "^SBD_PACEMAKER=.*",    line: 'SBD_PACEMAKER=yes'     }
         - { regexp: "^SBD_STARTMODE=.*",    line: 'SBD_STARTMODE=always'  }
-        - { regexp: "^SBD_DELAY_START=.*",  line: 'SBD_DELAY_START=yes'   }
         # Format line as so:
         #   SBD_DEVICE="/dev/disk/by-id/scsi-3600224804208a67da8073b2a9728af19"
         #   SBD_DEVICE="/dev/disk/by-id/scsi-360022480ef971a6c5759f2dc3adf4c96;/dev/disk/by-id/scsi-360022480ea4064ac4952ea8452d66317"
@@ -276,20 +260,23 @@
             group:                            root
             mode:                             '0644'
 
-        - name:                               "SBD - Add Before=corosync.service in Unit section"
-          ansible.builtin.lineinfile:
-            path:                             /etc/systemd/system/sbd.service
-            insertafter:                      '^\[Unit\].*'
-            line:                             'Before=corosync.service'
-            state:                            present
+        - name:                               "SBD - Create service override directory (if not exists)"
+          ansible.builtin.file:
+            path:                             /etc/systemd/system/sbd.service.d
+            state:                            directory
+            owner:                            root
+            group:                            root
+            mode:                             '0755'
 
-        - name:                               "SBD - Set TimeoutSec in Service section"
-          ansible.builtin.lineinfile:
-            path:                             /etc/systemd/system/sbd.service
-            regexp:                           '^TimeoutSec='
-            line:                             'TimeoutSec=600'
-            insertafter:                      '^\[Service\].*'
-            state:                            present
+        - name:                               "SBD - Set increased timeout for delayed start and before corosync"
+          ansible.builtin.copy:
+            content: |
+                                              [Service]
+                                              TimeoutSec=259
+            dest:                             /etc/systemd/system/sbd.service.d/sbd_delay_start.conf
+            owner:                            root
+            group:                            root
+            mode:                             '0644'
 
     - name:                                   "SBD - Configure service file for RedHat"
       when:                                   ansible_os_family | upper == "REDHAT"
@@ -306,7 +293,7 @@
           ansible.builtin.copy:
             content: |
                                               [Service]
-                                              TimeoutSec=144
+                                              TimeoutSec=223
             dest:                             /etc/systemd/system/sbd.service.d/sbd_delay_start.conf
             owner:                            root
             group:                            root
@@ -329,29 +316,21 @@
     name:                                  sbd
     enabled:                               true
     daemon_reload:                         true
-  when:
-                                            - (database_cluster_type == "ASD")   or
-                                              (database_cluster_type == "ISCSI") or
-                                              (scs_cluster_type      == "ASD")   or
-                                              (scs_cluster_type      == "ISCSI")       # scs_high_availability = true is already assumed
+  when:                                    cluster_stonith_type in ['ASD', 'ISCSI']
 
 - name:                                    "systemctl enable iscsi"
   ansible.builtin.systemd:
     name:                                  iscsi
     enabled:                               true
     daemon_reload:                         true
-  when:
-                                           - (database_cluster_type == "ISCSI") or
-                                             (scs_cluster_type      == "ISCSI")
+  when:                                    cluster_stonith_type == "ISCSI"
 
 - name:                                    "systemctl enable iscsid"
   ansible.builtin.systemd:
     name:                                  iscsid
     enabled:                               true
     daemon_reload:                         true
-  when:
-                                           - (database_cluster_type == "ISCSI") or
-                                             (scs_cluster_type      == "ISCSI")
+  when:                                    cluster_stonith_type == "ISCSI"
 ...
 # /*---------------------------------------------------------------------------8
 # |                                   END                                      |

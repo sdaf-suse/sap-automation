@@ -74,6 +74,11 @@
   gather_facts:                        true                                    # Important to collect hostvars information
   vars_files:
     - vars/ansible-input-api.yaml                                              # API Input template with defaults
+  vars:
+    distro_name:                       "{{ ansible_distribution | upper }}-{{ ansible_distribution_major_version }}"
+    distribution_id:                   "{{ ansible_distribution | lower ~ ansible_distribution_major_version }}"
+    distribution_full_id:              "{{ ansible_distribution | lower ~ ansible_distribution_version }}"
+    distro_family:                     "{{ ansible_os_family | upper }}"
 
   tasks:
 
@@ -83,7 +88,7 @@
         - platform not in [ "ORACLE", "ORACLE-ASM" ]
         - ansible_os_family != "Windows"
       block:
-        - name:                            "APP Installation Playbook: Define this SID"
+        - name:                            "Additional application server installation playbook - Define this SID"
           ansible.builtin.set_fact:
             this_sid:
               {
@@ -95,7 +100,7 @@
                 'app_inst_no':  '{{ app_instance_number }}'
               }
 
-        - name:                            "APP Installation Playbook: Define list of SIDs"
+        - name:                            "Additional application server installation playbook - Define list of SIDs"
           ansible.builtin.set_fact:
             all_sids:                      "{% if MULTI_SIDS is defined %}{{ MULTI_SIDS }}{% else %}{{ all_sids | default([]) + [this_sid] }}{% endif %}"
 
@@ -129,6 +134,11 @@
   gather_facts:                        true                                    # Important to collect hostvars information
   vars_files:
     - vars/ansible-input-api.yaml                                              # API Input template with defaults
+  vars:
+    distro_name:                       "{{ ansible_distribution | upper }}-{{ ansible_distribution_major_version }}"
+    distribution_id:                   "{{ ansible_distribution | lower ~ ansible_distribution_major_version }}"
+    distribution_full_id:              "{{ ansible_distribution | lower ~ ansible_distribution_version }}"
+    distro_family:                     "{{ ansible_os_family | upper }}"
 
 
   tasks:
@@ -137,7 +147,7 @@
 # Build the list of tasks to be executed in order here.
 #
 # -------------------------------------+---------------------------------------8
-    - name:                            "APP Playbook - Install: Set 'app' tier facts"
+    - name:                            "Additional application server installation playbook - Set 'app' tier facts"
       ansible.builtin.set_fact:
         tier:                          app                                     # SAP Install phase: APP - Application Server
         main_password:                 "{{ hostvars.localhost.sap_password }}"
@@ -147,7 +157,7 @@
         always_upload_jinja_templates: false
         sa_enabled:                    true
 
-    - name:                            "APP Installation Playbook: Define this SID"
+    - name:                            "Additional application server installation playbook - Define this SID"
       ansible.builtin.set_fact:
         this_sid:
           {
@@ -159,7 +169,7 @@
                 'app_inst_no':  '{{ app_instance_number }}'
           }
 
-    - name:                            "APP Installation Playbook: Define list of SIDs"
+    - name:                            "Additional application server installation playbook - Define list of SIDs"
       ansible.builtin.set_fact:
         all_sids:                      "{% if MULTI_SIDS is defined %}{{ MULTI_SIDS }}{% else %}{{ all_sids | default([]) + [this_sid] }}{% endif %}"
 
@@ -174,7 +184,7 @@
             - db_high_availability is defined
             - database_high_availability is not defined
 
-        - name:                        "APP Installation playbook: - Determine if part of high availablity deployment"
+        - name:                        "APP Installation playbook: - Determine if part of high availability deployment"
           ansible.builtin.set_fact:
             is_ha:                      "{{ database_high_availability | default(false) }}"
           tags:
@@ -187,9 +197,9 @@
           tags:
             - 1.9-kernelparameters
 
-        - name:                        "APP Installation - Linux based systems"
+        - name:                        "Additional application server installation playbook - Linux based systems"
           block:
-            - name:                    "APP Playbook - Install: Include 2.6-sap-mounts role"
+            - name:                    "Additional application server installation playbook - Include 2.6-sap-mounts role"
               ansible.builtin.include_role:
                 name:                  roles-sap-os/2.6-sap-mounts
               tags:
@@ -197,15 +207,24 @@
 
         - name:                        Run the APP installation Playbook
           block:
-            - name:                    "APP Playbook - Install: Include 5.3-app-install"
+
+            - name:                    "Additional application server installation playbook - Register repositories"
+              ansible.builtin.import_tasks: roles-os/1.3-repository/tasks/1.3.3-repositories-from-BOM.yaml
+              vars:
+                download_directory:    "{{ BOM_CATALOG }}"
+              tags:
+                - 1.3.3-repositories-from-BOM
+
+            - name:                    "Additional application server installation playbook - Installation"
               ansible.builtin.include_role:
                 name:                  roles-sap/5.3-app-install
-
               loop:                    "{{ all_sids }}"
               loop_control:
                 loop_var:              sid_to_be_deployed
+              tags:
+                - 5.3-app-install
 
-            - name:                    "APP Playbook - Install: - Create app-install-done flag"
+            - name:                    "Additional application server installation playbook - Create app-install-done flag"
               delegate_to:             localhost
               become:                  false
               ansible.builtin.file:
@@ -215,7 +234,7 @@
               when:
                 - app_already_installed is defined or (app_installation.rc is defined and app_installation.rc == 0)
           always:
-            - name:                    "APP Playbook - Install: Get the error lines"
+            - name:                    "Additional application server installation playbook - Get the error lines"
               ansible.builtin.set_fact:
                 error_lines:           "{{ error_lines | default([]) + [item] }}"
               with_items:              "{{ app_installation.stdout_lines }}"
@@ -229,7 +248,7 @@
                   - "prefix:           {{ app_bom_id.replace('.', '/').replace('/PD', '').split(':')[1] }}"
                   - "path:             {{ app_file_path }}"
 
-        - name:                        "APP Playbook - Install: Run post install activities"
+        - name:                        "Additional application server installation playbook - Run post install activities"
           ansible.builtin.include_role:
             name:                      roles-sap/7.0.0-post-install
           vars:
@@ -238,12 +257,12 @@
             path:                      "{{ app_file_path }}"
             tier:                      'app'
             this_sid:                  "{{ sid_to_be_deployed.sid | upper }}"
-            work_log_component_name:   "D{{ app_instance_number }}"
+            work_log_component_name:   "{{ 'J' if app_bom_instance_type == 'JAVA' else 'D' }}{{ app_instance_number }}"
           loop:                        "{{ all_sids }}"
           loop_control:
             loop_var:                  sid_to_be_deployed
 
-        - name:                        "APP Playbook - Install: Errors from APP installation"
+        - name:                        "Additional application server installation playbook - Errors from APP installation"
           ansible.builtin.debug:
             msg:                       "{{ error_lines }}"
           when:
@@ -256,13 +275,13 @@
         - "'app' in supported_tiers"
         - ansible_os_family == "Windows"
       block:
-        - name:                        "APP Installation Playbook: - Ensure Sharing Data Folder"
+        - name:                        "Additional application server installation playbook - - Ensure Sharing Data Folder"
           ansible.builtin.include_role:
             name:                      roles-sap-os/windows/2.3-sap-exports
 
         - name:                        Run the APP installation Playbook
           block:
-            - name:                    "APP Installation - Add packages"
+            - name:                    "Additional application server installation playbook - Add packages"
               ansible.builtin.include_role:
                 name:                  roles-os/windows/1.4-packages
               tags:
@@ -274,7 +293,7 @@
                 domain_user_password:      "{{ hostvars.localhost.winadm_password }}"
                 tier:                  app_tier
 
-            - name:                    "APP Installation Playbook: - Install SAPInst"
+            - name:                    "Additional application server installation playbook - Install SAPInst"
               ansible.builtin.include_role:
                 name:                  roles-sap/windows/5.3-app-install
               vars:
@@ -287,27 +306,19 @@
                 loop_var:              sid_to_be_deployed
 
           always:
-            - name:                    "APP Installation Playbook: - Get the Error lines from installation output"
-              ansible.builtin.set_fact:
-                error_lines:           "{{ error_lines | default([]) + [item] }}"
-              with_items:              "{{ app_installation.stdout_lines }}"
-              when:
-                - app_installation.stdout_lines is defined
-                - '"ERROR" in item'
-                - app_installation.rc > 0
-
-            - name:                    "APP Installation Playbook: - Run post installation routines"
+            - name:                    "Additional application server installation playbook - - Run post installation routines"
               ansible.builtin.include_role:
                 name:                  roles-sap/windows/7.0.0-post-install
               vars:
                 suffix:                "_APP"
                 tier:                  'app'
 
-            - name:                    "APP Installation Playbook: - Show errors from APP installation"
+            - name:                    "Additional application server installation playbook - - Show errors from APP installation"
               ansible.builtin.debug:
-                msg:                   "{{ error_lines }}"
+                msg:                   "{{ app_installation.stdout_lines | select('search', 'ERROR') }}"
               when:
-                - error_lines is defined
+                - app_installation.stdout_lines is defined
+                - app_installation.rc > 0
 
             - name:                    "APP Install: Rename sapinst_logs Folder with TimeStamp"
               ansible.windows.win_shell: |
@@ -320,7 +331,7 @@
               when:
                 - ansible_os_family == "Windows"
 
-            - name:                    "APP Playbook - Install: - Create app-install-done flag"
+            - name:                    "Additional application server installation playbook - - Create app-install-done flag"
               delegate_to:             localhost
               become:                  false
               ansible.builtin.file:

@@ -11,22 +11,22 @@
 
 # Mount Filesystems
 
-- name:                                "2.6 SAP Mounts: - Set the NFS Server name list"
+- name:                                "2.6.3 SAP Mount - Oracle Observer - Set the NFS Server name list"
   ansible.builtin.set_fact:
     nfs_server_temp:                   "{{ nfs_server_temp | default([]) + [item] }}"
   with_items:
     - "{{ query('inventory_hostnames', '{{ sap_sid | upper }}_SCS') }}"
     - "{{ query('inventory_hostnames', '{{ sap_sid | upper }}_DB') }}"
 
-- name:                                "2.6 SAP Mounts: - Set the NFS Server name"
+- name:                                "2.6.3 SAP Mount - Oracle Observer - Set the NFS Server name"
   ansible.builtin.set_fact:
     nfs_server:                        "{{ nfs_server_temp | first }}"
 
-- name:                                "2.6 SAP Mounts: - Set the usr/sap/install path"
+- name:                                "2.6.3 SAP Mount - Oracle Observer - Set the usr/sap/install path"
   ansible.builtin.set_fact:
     usr_sap_install_mount_point:       "{% if NFS_provider in ['AFS', 'ANF'] %}{% if usr_sap_install_mountpoint is defined and usr_sap_install_mountpoint != '' %}{{ usr_sap_install_mountpoint }}{% else %}{{ nfs_server }}:{{ target_media_location }}{% endif %}{% else %}{{ nfs_server }}:{{ target_media_location }}{% endif %}"
 
-- name:                                "2.6 SAP Mounts: - Show info"
+- name:                                "2.6.3 SAP Mount - Oracle Observer - Show info"
   ansible.builtin.debug:
     msg:
       - "NFS Provider: {{ NFS_provider }}"
@@ -44,9 +44,9 @@
     group:                             oinstall
 
 
-- name:                                "2.6 SAP Mounts: - sapmnt"
+- name:                                "2.6.3 SAP Mount - Oracle Observer - sapmnt"
   block:
-    - name:                            "2.6 SAP Mounts: - Mount sapmnt file system when not using external NFS (on observer)"
+    - name:                            "2.6.3 SAP Mount - Oracle Observer - Mount sapmnt file system when not using external NFS (on observer)"
       ansible.posix.mount:
         src:                           "{{ item.src }}"
         path:                          "{{ item.path }}"
@@ -54,15 +54,15 @@
         opts:                          defaults
         state:                         mounted
       loop:
-        - { type: 'nfs4',  src: '{{ nfs_server }}:/sapmnt/{{ sap_sid | upper }}',  path: '/sapmnt/{{ sap_sid | upper }}' }
+        - { type: "{{ nfs_fs_type }}",  src: '{{ nfs_server }}:/sapmnt/{{ sap_sid | upper }}',  path: '/sapmnt/{{ sap_sid | upper }}' }
       when:
         - node_tier == 'observer'
         - sap_mnt is undefined
   rescue:
-    - name:                            "2.6 SAP Mounts: - Re-mount File systems when not using external NFS (app & pas)"
+    - name:                            "2.6.3 SAP Mount - Oracle Observer - Re-mount File systems when not using external NFS (app & pas)"
       ansible.builtin.debug:
         msg:                           "Trying to remount sap_mnt"
-    - name:                            "2.6 SAP Mounts: - Mount sapmnt file system when not using external NFS (all app tier)"
+    - name:                            "2.6.3 SAP Mount - Oracle Observer - Mount sapmnt file system when not using external NFS (all app tier)"
       ansible.posix.mount:
         src:                           "{{ item.src }}"
         path:                          "{{ item.path }}"
@@ -70,12 +70,12 @@
         opts:                          defaults
         state:                         remounted
       loop:
-        - { type: 'nfs4',  src: '{{ nfs_server }}:/sapmnt/{{ sap_sid | upper }}',  path: '/sapmnt/{{ sap_sid | upper }}' }
+        - { type: "{{ nfs_fs_type }}",  src: '{{ nfs_server }}:/sapmnt/{{ sap_sid | upper }}',  path: '/sapmnt/{{ sap_sid | upper }}' }
       when:
         - node_tier == 'observer'
         - sap_mnt is undefined
 
-- name:                                "2.6 SAP Mounts: - Mount Install folder when not using AFS"
+- name:                                "2.6.3 SAP Mount - Oracle Observer - Mount Install folder when not using AFS"
   ansible.posix.mount:
     src:                               "{{ item.src }}"
     path:                              "{{ item.path }}"
@@ -83,7 +83,7 @@
     opts:                              defaults
     state:                             mounted
   loop:
-    - { type: 'nfs4', src: '{{ usr_sap_install_mount_point }}', path: '{{ target_media_location }}' }
+    - { type: "{{ nfs_fs_type }}", src: '{{ usr_sap_install_mount_point }}', path: '{{ target_media_location }}' }
   when:
     - node_tier == 'observer'
     - usr_sap_install_mountpoint is not defined
@@ -97,7 +97,8 @@
       'temppath':           'sapinstall',
       'folder':             '{{ bom_base_name }}',
       'mount':              '{{ usr_sap_install_mountpoint }}',
-      'opts':               'rw,hard,rsize=65536,wsize=65536,sec=sys,vers=4.1,tcp',
+      'opts':               "rw,hard,rsize=65536,wsize=65536,noresvport,sec=sys,vers=4.1,proto=tcp{{ ',_netdev' if use_eit_for_afs else '' }}",
+      'fstype':             "{{ nfs_fs_type }}",
       'owner':              '{{ sidadm_uid }}',
       'path':               '/usr/sap/install',
       'permissions':        '0777',

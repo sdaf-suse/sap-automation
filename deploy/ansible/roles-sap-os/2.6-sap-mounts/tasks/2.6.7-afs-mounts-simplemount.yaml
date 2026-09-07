@@ -24,6 +24,11 @@
   ansible.builtin.set_fact:
     all_sap_mounts:                    "{% if MULTI_SIDS is defined %}{{ MULTI_SIDS }}{% else %}{{ all_sap_mounts | default([]) + [this_sid] }}{% endif %}"
 
+- name:                                "2.6.0 AFS Mounts - Set the NFSmount options"
+  ansible.builtin.set_fact:
+    nfs_fs_type:                       "{% if use_eit_for_afs %}aznfs{% else %}nfs{% endif %}"
+    afs_mnt_options:                   "{% if use_eit_for_afs %}noresvport,nfsvers=4.1,sec=sys,hard,proto=tcp,_netdev{% else %}noresvport,nfsvers=4.1,sec=sys,hard{% endif %}"
+
 - name:                                "AFS Mount: Get the Server name list"
   ansible.builtin.set_fact:
     first_server_temp:                 "{{ first_server_temp | default([]) + [item] }}"
@@ -70,8 +75,8 @@
               ansible.posix.mount:
                 src:                   "{{ sap_mnt }}"
                 path:                  "/saptmp"
-                fstype:                "nfs4"
-                opts:                  "vers=4.1,sec=sys"
+                fstype:                "{{ nfs_fs_type }}"
+                opts:                  "{{ afs_mnt_options }}"
                 state:                 mounted
 
           rescue:
@@ -87,8 +92,8 @@
               ansible.posix.mount:
                 src:                   "{{ sap_mnt }}"
                 path:                  "/saptmp"
-                fstype:                "nfs4"
-                opts:                  "vers=4.1,sec=sys"
+                fstype:                "{{ nfs_fs_type }}"
+                opts:                  "{{ afs_mnt_options }}"
                 state:                 mounted
 
         - name:                        "AFS Mount: Create SAP Directories (AFS)"
@@ -133,8 +138,8 @@
           ansible.posix.mount:
             src:                       "{{ sap_mnt }}"
             path:                      "/saptmp"
-            fstype:                    "nfs4"
-            opts:                      "vers=4.1,sec=sys"
+            fstype:                    "{{ nfs_fs_type }}"
+            opts:                      "{{ afs_mnt_options }}"
             state:                     absent
       when:
         - sap_mnt is defined
@@ -152,7 +157,8 @@
       'temppath':           'sapinstall',
       'folder':             '{{ bom_base_name }}',
       'mount':              '{{ usr_sap_install_mountpoint }}',
-      'opts':               'rw,hard,rsize=65536,wsize=65536,sec=sys,vers=4.1,tcp',
+      'opts':               "rw,hard,rsize=65536,wsize=65536,sec=sys,vers=4.1,tcp{{ ',_netdev' if use_eit_for_afs else '' }}",
+      'fstype':             "{{ nfs_fs_type }}",
       'owner':              '{{ sidadm_uid }}',
       'path':               '/usr/sap/install',
       'permissions':        '0777',
@@ -241,8 +247,8 @@
       ansible.posix.mount:
         src:                           "{{ sap_mnt }}/sapmnt{{ sap_sid | upper }}"
         path:                          "/sapmnt/{{ sap_sid | upper }}"
-        fstype:                        nfs4
-        opts:                          'vers=4.1,sec=sys'
+        fstype:                        "{{ nfs_fs_type }}"
+        opts:                          "{{ afs_mnt_options }}"
         state:                         mounted
   rescue:
     - name:                            "AFS Mount: Pause for 15 seconds"
@@ -253,8 +259,8 @@
       ansible.posix.mount:
         src:                           "{{ sap_mnt }}/sapmnt{{ sap_sid | upper }}"
         path:                          "/sapmnt/{{ sap_sid | upper }}"
-        fstype:                        nfs4
-        opts:                          'vers=4.1,sec=sys'
+        fstype:                        "{{ nfs_fs_type }}"
+        opts:                          "{{ afs_mnt_options }}"
         state:                         mounted
 
   when:
@@ -264,7 +270,7 @@
 
 - name:                                "AFS Mount: usr/sap/{{ sap_sid | upper }}"
   when:
-    - node_tier in ['scs','ers', 'pas']
+    - node_tier in ['scs','ers']
     - sap_mnt is defined
     - use_simple_mount is defined and use_simple_mount
   block:
@@ -273,12 +279,12 @@
       ansible.posix.mount:
         src:                           "{{ item.src }}"
         path:                          "{{ item.path }}"
-        fstype:                        "{{ item.type }}"
-        opts:                          'rw,hard,rsize=65536,wsize=65536,sec=sys,vers=4.1,tcp'
+        fstype:                        "{{ nfs_fs_type }}"
+        opts:                          "{{ afs_mnt_options }}"
         state:                         mounted
       register:                        sys_mounted
       loop:
-        - { type: 'nfs4',  src: '{{ sap_mnt }}/usrsap{{ sap_sid | upper }}', path: '/usr/sap/{{ sap_sid | upper }}' }
+        - { type: "{{ nfs_fs_type }}",  src: '{{ sap_mnt }}/usrsap{{ sap_sid | upper }}', path: '/usr/sap/{{ sap_sid | upper }}' }
   rescue:
     - name:                            "AFS Mount: Pause for 15 seconds"
       ansible.builtin.pause:
@@ -296,12 +302,12 @@
       ansible.posix.mount:
         src:                           "{{ item.src }}"
         path:                          "{{ item.path }}"
-        fstype:                        "{{ item.type }}"
-        opts:                          'rw,hard,rsize=65536,wsize=65536,sec=sys,vers=4.1,tcp'
+        fstype:                        "{{ nfs_fs_type }}"
+        opts:                          "{{ afs_mnt_options }}"
         state:                         mounted
 
       loop:
-        - { type: 'nfs4',  src: '{{ sap_mnt }}/usrsap{{ sap_sid | upper }}', path: '/usr/sap/{{ sap_sid | upper }}' }
+        - { type: "{{ nfs_fs_type }}",  src: '{{ sap_mnt }}/usrsap{{ sap_sid | upper }}', path: '/usr/sap/{{ sap_sid | upper }}' }
   tags:
     - sap_app_ha_sys_mount
 
@@ -314,7 +320,8 @@
       'temppath':          'saptrans',
       'mount':             '{{ sap_trans }}',
       'owner':             'root',
-      'opts':              'rw,hard,rsize=65536,wsize=65536,sec=sys,vers=4.1,tcp',
+      'opts':              "rw,hard,rsize=65536,wsize=65536,sec=sys,vers=4.1,tcp{{ ',_netdev' if use_eit_for_afs else '' }}",
+      'fstype':            "{{ nfs_fs_type }}",
       'path':              '/usr/sap/trans',
       'permissions':       '0775',
       'set_chattr_on_dir': false,
@@ -337,8 +344,9 @@
       'type':              'shared',
       'temppath':          'shared',
       'mount':             "{% if ansible_hostname in query('inventory_hostnames', '{{ sap_sid | upper }}_DB')[0::2] %}{{ hana_shared_mountpoint[0] }}{% else %}{{ hana_shared_mountpoint[1] }}{% endif %}",
-      'opts':              'vers=4,minorversion=1,sec=syss',
-      'owner':              '{{ sidadm_uid }}',
+      'opts':              "vers=4,minorversion=1,sec=sys{{ ',_netdev' if use_eit_for_afs else '' }}",
+      'fstype':            "{{ nfs_fs_type }}",
+      'owner':             '{{ sidadm_uid }}',
       'path':              '/hana/shared',
       'permissions':       '0775',
       'set_chattr_on_dir': false,
@@ -352,6 +360,6 @@
     - db_high_availability
     - hana_shared_mountpoint is defined
     - hana_shared_mountpoint | length == 2
-
+    - node_tier in ['hana']
 
 ...
