@@ -24,24 +24,30 @@ namespace SDAFWebApp.Controllers
         private readonly ITableStorageService<AppFile> _appFileService;
         private FormViewModel<LandscapeModel> landscapeView;
         private readonly IConfiguration _configuration;
-        private RestHelper restHelper;
+        private readonly RestHelper restHelper;
+
         private readonly ImageDropdown[] imagesOffered;
         private List<SelectListItem> imageOptions;
         private Dictionary<string, Image> imageMapping;
         private readonly string sdafControlPlaneEnvironment;
         private readonly string sdafControlPlaneLocation;
+        private readonly string sdafControlPlaneName;
+        private readonly string platform;
 
         public LandscapeController(ITableStorageService<LandscapeEntity> landscapeService, ITableStorageService<AppFile> appFileService, IConfiguration configuration)
         {
             _landscapeService = landscapeService;
             _appFileService = appFileService;
             _configuration = configuration;
-            restHelper = new RestHelper(configuration);
+            platform = configuration["DEVOPS_PLATFORM"] ?? "ado";
+            restHelper = new RestHelper(configuration, platform);
             landscapeView = SetViewData();
             imagesOffered = Helper.GetOfferedImages(_appFileService).Result;
             InitializeImageOptionsAndMapping();
             sdafControlPlaneEnvironment = configuration["CONTROLPLANE_ENV"];
             sdafControlPlaneLocation = configuration["CONTROLPLANE_LOC"];
+            sdafControlPlaneName = configuration["CONTROL_PLANE_NAME"];
+
         }
         private FormViewModel<LandscapeModel> SetViewData()
         {
@@ -115,15 +121,22 @@ namespace SDAFWebApp.Controllers
             ];
             try
             {
-                List<LandscapeEntity> landscapeEntities = await _landscapeService.GetAllAsync();
-
-                foreach (LandscapeEntity e in landscapeEntities)
+                
+                if (platform == "ado")
                 {
-                    options.Add(new SelectListItem
+                    List<SelectListItem> environments = restHelper.GetEnvironmentsList().Result;
+                    foreach (SelectListItem zone in environments)
                     {
-                        Text = e.RowKey,
-                        Value = e.RowKey
-                    });
+                        options.Add(zone);
+                    }
+                }
+                else
+                {
+                    List<SelectListItem> environments = restHelper.GetEnvironmentsList().Result;
+                    foreach (SelectListItem zone in environments)
+                    {
+                        options.Add(zone);
+                    }
                 }
             }
             catch
@@ -136,7 +149,8 @@ namespace SDAFWebApp.Controllers
         [HttpGet]
         public async Task<LandscapeModel> GetById(string id, string partitionKey)
         {
-            if (id == null || partitionKey == null) throw new ArgumentNullException();
+            if (id == null) throw new ArgumentNullException(nameof(id), "Parameter 'id' cannot be null.");
+            if (partitionKey == null) throw new ArgumentNullException(nameof(partitionKey), "Parameter 'partitionKey' cannot be null.");
             var landscapeEntity = await _landscapeService.GetByIdAsync(id, partitionKey);
             if (landscapeEntity == null || landscapeEntity.Landscape == null) throw new KeyNotFoundException();
             return JsonConvert.DeserializeObject<LandscapeModel>(landscapeEntity.Landscape);
@@ -192,13 +206,22 @@ namespace SDAFWebApp.Controllers
                     landscape.Id = Helper.GenerateId(landscape);
                     DateTime currentDateAndTime = DateTime.Now;
                     landscape.LastModified = currentDateAndTime.ToShortDateString();
-                    landscape.subscription_id = landscape.subscription.Replace("/subscriptions/", "");
+                    if (!string.IsNullOrEmpty(landscape.subscription))
+                    {
+                        landscape.subscription_id = landscape.subscription.Replace("/subscriptions/", "");
+                    }
+
+                    if (string.IsNullOrEmpty(landscape.environment) && !string.IsNullOrEmpty(landscape.workload_zone))
+                    {
+                        landscape.environment = landscape.workload_zone.Split('-')[0];
+                    }
+                    if (string.IsNullOrEmpty(landscape.network_logical_name) && !string.IsNullOrEmpty(landscape.workload_zone))
+                    {
+                        landscape.network_logical_name = landscape.workload_zone.Split('-')[2];
+                    }
 
                     await _landscapeService.CreateAsync(new LandscapeEntity(landscape));
                     TempData["success"] = "Successfully created workload zone " + landscape.Id;
-                    string id = landscape.Id;
-                    string path = $"/LANDSCAPE/{id}/{id}.tfvars";
-                    string content = Helper.ConvertToTerraform(landscape);
 
                     return RedirectToAction("Index");
                 }
@@ -223,6 +246,7 @@ namespace SDAFWebApp.Controllers
                 LandscapeModel landscape = await GetById(id, partitionKey);
                 landscape.controlPlaneEnvironment = sdafControlPlaneEnvironment;
                 landscape.controlPlaneLocation = sdafControlPlaneLocation;
+                landscape.controlPlaneName = sdafControlPlaneName;
                 landscapeView.SapObject = landscape;
 
                 List<SelectListItem> environments = restHelper.GetEnvironmentsList().Result;
@@ -231,6 +255,7 @@ namespace SDAFWebApp.Controllers
 
                 return View(landscapeView);
             }
+            // Intentional top-level catch: surfaces the error to the user/caller rather than crashing the request.
             catch (Exception e)
             {
                 TempData["error"] = e.Message;
@@ -239,6 +264,7 @@ namespace SDAFWebApp.Controllers
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [ActionName("Deploy")]
         public async Task<RedirectToActionResult> DeployConfirmedAsync(string id, string partitionKey, Templateparameters parameters)
         {
@@ -247,32 +273,65 @@ namespace SDAFWebApp.Controllers
                 LandscapeModel landscape = await GetById(id, partitionKey);
 
                 string path = $"/LANDSCAPE/{id}/{id}.tfvars";
-                landscape.subscription_id = landscape.subscription.Replace("/subscriptions/", "");
+
+
+                if (!string.IsNullOrEmpty(landscape.subscription))
+                {
+                    landscape.subscription_id = landscape.subscription.Replace("/subscriptions/", "");
+                }
+
+                if (string.IsNullOrEmpty(landscape.environment) && !string.IsNullOrEmpty(landscape.workload_zone))
+                {
+                    landscape.environment = landscape.workload_zone.Split('-')[0];
+                }
+
                 string content = Helper.ConvertToTerraform(landscape);
 
                 await restHelper.UpdateRepo(path, content);
 
-                string pipelineId = _configuration["WORKLOADZONE_PIPELINE_ID"];
-                string branch = _configuration["SourceBranch"];
-                parameters.workload_zone = id;
-                PipelineRequestBody requestBody = new()
+                switch (platform.ToLower())
                 {
-                    resources = new Resources
-                    {
-                        repositories = new Repositories
+                    case "ado":
                         {
-                            self = new Self
+                        string pipelineId = _configuration["WORKLOADZONE_PIPELINE_ID"];
+                        string branch = _configuration["SourceBranch"];
+
+                        parameters.workload_zone = id;
+                        parameters.environment = null; 
+                        PipelineRequestBody requestBody = new()
+                        {
+                            resources = new Resources
                             {
-                                refName = $"refs/heads/{branch}"
-                            }
+                                repositories = new Repositories
+                                {
+                                    self = new Self
+                                    {
+                                        refName = $"refs/heads/{branch}"
+                                    }
+                                }
+                            },
+                            templateParameters = parameters
+                        };
+
+                        await restHelper.TriggerPipeline(pipelineId, requestBody);
+
+                        TempData["success"] = "Successfully triggered workload zone deployment pipeline for " + id;
+                        break;
                         }
-                    },
-                    templateParameters = parameters
-                };
+                    case "github":
+                    {
+                            // Trigger with inputs
+                            var inputs = new Dictionary<string, object>
+                            {
+                                { "workload_zone_name", id.Replace("-INFRASTRUCTURE", "") },
+                                { "control_plane_name", sdafControlPlaneName }
+                            };
+                            await restHelper.TriggerGitHubWorkflow("03-deploy-sap-workload-zone.yml", "main", inputs);
+                            TempData["success"] = "Successfully triggered workload zone deployment action for " + id;
+                            break;
+                        }
+                }
 
-                await restHelper.TriggerPipeline(pipelineId, requestBody);
-
-                TempData["success"] = "Successfully triggered workload zone deployment pipeline for " + id;
             }
             catch (Exception e)
             {
@@ -316,11 +375,26 @@ namespace SDAFWebApp.Controllers
             {
                 ActionResult<LandscapeModel> result = await GetById(id, partitionKey);
                 LandscapeModel landscape = result.Value;
+                if (!string.IsNullOrEmpty(landscape.subscription))
+                {
+                    landscape.subscription_id = landscape.subscription.Replace("/subscriptions/", "");
+                }
+
+                if (string.IsNullOrEmpty(landscape.environment) && !string.IsNullOrEmpty(landscape.workload_zone))
+                {
+                    landscape.environment = landscape.workload_zone.Split('-')[0];
+                }
+                if (string.IsNullOrEmpty(landscape.network_logical_name) && !string.IsNullOrEmpty(landscape.workload_zone))
+                {
+                    landscape.network_logical_name = landscape.workload_zone.Split('-')[2];
+                }
+
                 landscapeView.SapObject = landscape;
                 ViewBag.ValidImageOptions = (imagesOffered.Length != 0);
                 ViewBag.ImageOptions = imageOptions;
                 return View(landscapeView);
             }
+            // Intentional top-level catch: surfaces the error to the user/caller rather than crashing the request.
             catch (Exception e)
             {
                 TempData["error"] = e.Message;
@@ -338,7 +412,7 @@ namespace SDAFWebApp.Controllers
                 try
                 {
                     string newId = Helper.GenerateId(landscape);
-                    if (landscape.Id == null) landscape.Id = newId;
+                    landscape.Id ??= newId;
                     if (newId != landscape.Id)
                     {
                         landscape.Id = newId;
@@ -369,8 +443,20 @@ namespace SDAFWebApp.Controllers
                         }
                         DateTime currentDateAndTime = DateTime.Now;
                         landscape.LastModified = currentDateAndTime.ToShortDateString();
+                        if (string.IsNullOrEmpty(landscape.environment) && !string.IsNullOrEmpty(landscape.workload_zone))
+                        {
+                            landscape.environment = landscape.workload_zone.Split('-')[0];
+                        }
+                        if (string.IsNullOrEmpty(landscape.network_logical_name) && !string.IsNullOrEmpty(landscape.workload_zone))
+                        {
+                            landscape.network_logical_name = landscape.workload_zone.Split('-')[2];
+                        }
+                        if (!string.IsNullOrEmpty(landscape.subscription))
+                        {
+                            landscape.subscription_id = landscape.subscription.Replace("/subscriptions/", "");
+                        }
 
-                        await _landscapeService.UpdateAsync(new LandscapeEntity(landscape));
+                       await _landscapeService.UpdateAsync(new LandscapeEntity(landscape));
                         TempData["success"] = "Successfully updated workload zone " + landscape.Id;
 
                         string id = landscape.Id;
@@ -425,7 +511,6 @@ namespace SDAFWebApp.Controllers
                     await _landscapeService.CreateAsync(new LandscapeEntity(landscape));
                     TempData["success"] = "Successfully created workload zone " + landscape.Id;
                     string id = landscape.Id;
-                    string path = $"/LANDSCAPE/{id}/{id}.tfvars";
                     string content = Helper.ConvertToTerraform(landscape);
 
                     byte[] bytes = Encoding.UTF8.GetBytes(content);
@@ -444,6 +529,7 @@ namespace SDAFWebApp.Controllers
 
                     return RedirectToAction("Index");
                 }
+                // Intentional top-level catch: surfaces the error to the user/caller rather than crashing the request.
                 catch (Exception e)
                 {
                     ModelState.AddModelError("LandscapeId", "Error creating workload zone: " + e.Message);
@@ -484,12 +570,14 @@ namespace SDAFWebApp.Controllers
                 string path = $"{id}.tfvars";
                 string content = Helper.ConvertToTerraform(landscape);
 
+                // FileStreamResult takes ownership of the stream and disposes it after writing the response.
                 var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
                 return new FileStreamResult(stream, new MediaTypeHeaderValue("text/plain"))
                 {
                     FileDownloadName = path
                 };
             }
+            // Intentional top-level catch: surfaces the error to the user/caller rather than crashing the request.
             catch (Exception e)
             {
                 TempData["error"] = "Something went wrong downloading file " + id + ": " + e.Message;
@@ -512,6 +600,7 @@ namespace SDAFWebApp.Controllers
                 await _landscapeService.UpdateAsync(landscapeEntity);
                 TempData["success"] = id + " is now the default workload zone";
             }
+            // Intentional top-level catch: surfaces the error to the user/caller rather than crashing the request.
             catch (Exception e)
             {
                 TempData["error"] = "Error setting default for workload zone: " + e.Message;
@@ -531,6 +620,7 @@ namespace SDAFWebApp.Controllers
                     Console.WriteLine("Unset existing default " + existingDefault.Id);
                 }
             }
+            // Intentional top-level catch: surfaces the error to the user/caller rather than crashing the request.
             catch (Exception e)
             {
                 throw new Exception("Error unsetting the current default object: " + e.Message);

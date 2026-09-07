@@ -1,10 +1,8 @@
-﻿@model SDAFWebApp.Models.FormViewModel<SystemModel>;
+@model SDAFWebApp.Models.FormViewModel<SystemModel>;
 @using System.Text.Json
 
 @{
     ViewBag.Title = "Create system";
-    List<SelectListItem> imageOptions = ViewBag.ImageOptions;
-    bool validImageOptions = ViewBag.ValidImageOptions;
 }
 
 <script src="~/lib/jquery/dist/jquery.min.js"></script>
@@ -14,7 +12,10 @@
         var system = @Html.Raw(JsonSerializer.Serialize(Model.SapObject));
         createModel(system);
         retainFormValues();
-        getEnvironmentsFromAdo(@ViewBag.IsPipelineDeployment);
+        getEnvironments(
+            @(string.Equals((string)ViewBag.IsPipelineDeployment, "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false"),
+            @Html.Raw(JsonSerializer.Serialize((string)ViewBag.Platform))
+        );
 
         var formHeader = $("#form-sticky-header");
         var sticky = $("#form-sticky-header").offset().top;

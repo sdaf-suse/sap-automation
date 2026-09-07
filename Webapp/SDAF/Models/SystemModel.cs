@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using SDAFWebApp.Controllers;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using static SDAFWebApp.Models.CustomValidators;
@@ -46,8 +48,202 @@ namespace SDAFWebApp.Models
         [LocationValidator(ErrorMessage = "Location is not a valid Azure region")]
         public string location { get; set; }
 
+        public string locationCode { get; set; } = "";
+
         public string Description { get; set; }
 
+        public string MD_Description
+        {
+            get
+            {
+                string systemType = "Distributed";
+                if (database_high_availability == true || scs_high_availability == true)
+                {
+                    systemType = "High Availability";
+                }
+
+                string description = string.Format("# Type of system:        {0}", systemType).PadRight(88);
+                description += "#";
+                return description;
+            }
+        }
+        public string MD_Description2
+        {
+            get
+            {
+
+                string description = string.Format("# Database:              {0}", database_platform).PadRight(88);
+                description += "#";
+                return description;
+            }
+        }
+
+        public string MD_SID
+        {
+            get
+            {
+
+                string thisSid = string.Format("# System Identifier:     {0}", sid).PadRight(88);
+                thisSid += "#";
+                return thisSid;
+            }
+        }
+
+        public string MD_Region
+                    {
+            get
+            {
+                string regionDescription = string.Format("# Azure Region:          {0}", location).PadRight(88);
+                regionDescription += "#";
+                return regionDescription;
+            }
+        }
+
+        public string MD_Zone
+        {
+            get
+            {
+                string zoneDescription = string.Format("# Workload Zone:         {0}", workload_zone ?? environment + "-" + locationCode + "-" + network_logical_name).PadRight(88);
+                zoneDescription += "#";
+                return zoneDescription;
+            }
+        }
+
+        public string MD_Storage
+        {
+            get
+            {
+                string storageDescription = string.Format("# Storage:               Premium Disks").PadRight(88);
+                if (database_use_premium_v2_storage == true)
+                {
+                    storageDescription = string.Format("# Storage:               Premium Disks v2").PadRight(88);
+                }
+
+                storageDescription += "#";
+                return storageDescription;
+            }
+        }
+
+        public string MD_VMSS
+        {
+            get
+            {
+                string vmssDescription = string.Format("# VMSS_Flex:             No scalesets in use").PadRight(88);
+                if (use_scalesets_for_deployment == true)
+                {
+                    vmssDescription = string.Format("# VMSS_Flex:             In use").PadRight(88);
+                }
+
+                vmssDescription += "#";
+                return vmssDescription;
+            }
+        }
+
+        public string MD_NFS
+        {
+            get
+            {
+                string nfsDescription = string.Format("# NFS:                   Not in use").PadRight(88);
+                if (NFS_provider != null)
+                {
+                    nfsDescription = string.Format("# NFS Implementation:    {0}", NFS_provider).PadRight(88);
+                }
+                nfsDescription += "#";
+                return nfsDescription;
+            }
+        }
+
+        public string MD_DBServers
+        {
+            get
+            {
+                int dbserverCount = database_server_count.GetValueOrDefault();
+                if (database_high_availability == true)
+                {
+                    dbserverCount = database_server_count.GetValueOrDefault() * 2;
+                }
+                string dbServerDescription = string.Format("# Database servers:      N/A").PadRight(88);
+                if (database_vm_image != null)
+                {
+                    dbServerDescription = string.Format("# Database servers:      {0} x {1} {2} {3}", dbserverCount, database_vm_image.publisher == null ? "N/A" : database_vm_image.publisher, database_vm_image.offer == null ? "N/A" : database_vm_image.offer, database_vm_image.sku == null ? "N/A" : database_vm_image.sku).PadRight(88);
+                }
+                dbServerDescription += "#";
+                return dbServerDescription;
+            }
+        }
+        public string MD_SCSServers
+        {
+            get
+            {
+                int scsServerCount = scs_server_count.GetValueOrDefault();
+                if (scs_high_availability == true)
+                {
+                    scsServerCount = scs_server_count.GetValueOrDefault() * 2;
+                }
+
+                string scsServerDescription = string.Format("# SCS servers:           N/A").PadRight(88);
+                if (scs_server_image != null)
+                {
+                    scsServerDescription = string.Format("# SCS servers:           {0} x {1} {2} {3}", scsServerCount, scs_server_image.publisher == null ? "N/A" : scs_server_image.publisher, scs_server_image.offer == null ? "N/A" : scs_server_image.offer, scs_server_image.sku == null ? "N/A" : scs_server_image.sku).PadRight(88);
+                }
+                scsServerDescription += "#";
+                return scsServerDescription;
+            }
+        }
+
+        public string MD_AppServers
+        {
+            get
+            {
+                string appServerDescription = string.Format("# Application servers:   N/A").PadRight(88);
+                if (application_server_image != null)
+                {
+                    appServerDescription = string.Format("# Application servers:   {0} x {1} {2} {3}", application_server_count, application_server_image.publisher == null ? "N/A" : application_server_image.publisher, application_server_image.offer == null ? "N/A" : application_server_image.offer, application_server_image.sku == null ? "N/A" : application_server_image.sku).PadRight(88);
+                }
+                appServerDescription += "#";
+                return appServerDescription;
+            }
+        }
+
+        public string MD_Cluster_DB
+        {
+            get
+            {
+                string clusterDbDescription = string.Format("# Database cluster type: {0}", database_cluster_type == null ? "N/A" : database_cluster_type).PadRight(88);
+                clusterDbDescription += "#";
+                return clusterDbDescription;
+            }
+        }
+
+        public string MD_Cluster_SCS
+        {
+            get
+            {
+                string clusterScsDescription = string.Format("# SCS cluster type:      {0}", scs_cluster_type == null ? "N/A" : scs_cluster_type).PadRight(88);
+                clusterScsDescription += "#";
+                return clusterScsDescription;
+            }
+        }
+
+        public string MD_ScaleOut
+        {
+            get
+            {
+                string scaleoutDescription= string.Format("# HANA Scale-out:        {0}", database_HANA_use_scaleout_scenario == true ? "Yes" : "No").PadRight(88);
+                                            
+                scaleoutDescription += "#";
+                return scaleoutDescription;
+            }
+        }
+        public string MD_ScaleOut2
+        {
+            get
+            {
+                string scaleoutDescription = string.Format("# Standby Server:        {0}", database_HANA_no_standby_role == true ? "No" : "Yes").PadRight(88);
+                scaleoutDescription += "#";
+                return scaleoutDescription;
+            }
+        }
 
         [RequiredIfNotDefault]
         [DisplayName("Network name")]
@@ -56,6 +252,7 @@ namespace SDAFWebApp.Models
 
         [RequiredIfNotDefault]
         [DisplayName("System ID")]
+        [RegularExpression(@"^\w{0,3}$", ErrorMessage = "SID name cannot exceed three characters")]
         public string sid { get; set; }
 
 
@@ -65,6 +262,10 @@ namespace SDAFWebApp.Models
         public string subscription { get; set; }
 
         public string subscription_id { get; set; }
+
+        public string suse_subscription_id { get; set; }
+
+        public bool? AFS_enable_encryption_in_transit { get; set; } = false;
 
         public string custom_disk_sizes_filename { get; set; }
 
@@ -78,7 +279,7 @@ namespace SDAFWebApp.Models
 
         public bool? deploy_application_security_groups { get; set; } = true;
 
-        public bool? deploy_v1_monitoring_extension { get; set; } = true;
+        public bool? deploy_v1_monitoring_extension { get; set; } = false;
 
         public bool? deploy_monitoring_extension { get; set; } = false;
 
@@ -95,6 +296,10 @@ namespace SDAFWebApp.Models
 
         [ScaleSetIdValidator(ErrorMessage = "Invalid Scaleset id")]
         public string scaleset_id { get; set; }
+
+        public string disk_controller_type_database_tier { get; set; } = "SCSI";
+
+        public string disk_controller_type_app_tier { get; set; } = "SCSI";
 
         /*---------------------------------------------------------------------------8
         |                                                                            |
@@ -171,6 +376,23 @@ namespace SDAFWebApp.Models
 
         /*---------------------------------------------------------------------------8
         |                                                                            |
+        |                       Observer Variables                                   |
+        |                                                                            |
+        +------------------------------------4--------------------------------------*/
+
+        public bool? use_observer { get; set; } = false;
+        public string observer_vm_size { get; set; }
+
+        public Tag[] observer_vm_tags { get; set; }
+
+        public string[] observer_vm_zones { get; set; }
+
+        [IpAddressValidator]
+        public string[] observer_nic_ips { get; set; }
+
+
+        /*---------------------------------------------------------------------------8
+        |                                                                            |
         |                       Miscallaneous information                            |
         |                                                                            |
         +------------------------------------4--------------------------------------*/
@@ -220,7 +442,7 @@ namespace SDAFWebApp.Models
 
         public bool? shared_access_key_enabled { get; set; } = false;
 
-        public bool? shared_access_key_enabled_nfs { get; set; } = true;
+        public bool? shared_access_key_enabled_nfs { get; set; } = false;
 
 
 
@@ -253,6 +475,9 @@ namespace SDAFWebApp.Models
 
         public string database_cluster_disk_type { get; set; } = "Premium_ZRS";
 
+        public bool? use_saphanasr_angi { get; set; }
+
+        //[Obsolete("Use use_saphanasr_angi instead")]
         public bool? use_sles_saphanasr_angi { get; set; }
 
         /*---------------------------------------------------------------------------8
@@ -288,7 +513,31 @@ namespace SDAFWebApp.Models
 
         public int? database_server_count { get; set; } = 1;
 
-        public bool? database_dual_nics { get; set; }
+        public bool? db_dual_nics { get; set; } = false;
+
+        public bool? database_dual_nics {
+            get
+            {
+                if (database_HANA_use_scaleout_scenario == true)
+                {
+                    return true;
+                }
+                else
+                    return db_dual_nics;
+            }
+            set
+            {
+                if (database_HANA_use_scaleout_scenario == true)
+                {
+                    db_dual_nics = true;
+                }
+                else
+                {
+                    db_dual_nics = value;
+                }
+            }
+
+        }
 
         public string database_size { get; set; }
 
@@ -505,6 +754,8 @@ namespace SDAFWebApp.Models
         public string azure_files_sapmnt_id { get; set; }
 
         public bool? use_random_id_for_storageaccounts { get; set; } = true;
+
+        public bool? AFS_usr_sap { get; set; }
 
         [PrivateEndpointIdValidator]
         public string sapmnt_private_endpoint_id { get; set; }

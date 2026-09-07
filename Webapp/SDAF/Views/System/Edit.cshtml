@@ -3,7 +3,6 @@
 
 @{
     ViewBag.Title = "Edit system";
-    List<SelectListItem> imageOptions = ViewBag.ImageOptions;
 }
 
 <script src="~/lib/jquery/dist/jquery.min.js"></script>
@@ -14,7 +13,10 @@
         createModel(system);
         setDataFromResource();
         retainFormValues();
-        getEnvironmentsFromAdo(@ViewBag.IsPipelineDeployment);
+        getEnvironments(
+            @(string.Equals((string)ViewBag.IsPipelineDeployment, "true", StringComparison.OrdinalIgnoreCase) ? "true" : "false"),
+            @Html.Raw(JsonSerializer.Serialize((string)ViewBag.Platform))
+        );
 
         var formHeader = $("#form-sticky-header");
         var sticky = $("#form-sticky-header").offset().top;

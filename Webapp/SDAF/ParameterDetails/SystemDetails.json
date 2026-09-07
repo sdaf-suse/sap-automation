@@ -1,7 +1,7 @@
 [
   {
     "Section": "Set as default",
-    "Link": "https://review.docs.microsoft.com/en-us/azure/virtual-machines/workloads/sap/automation-configure-SYSTEM?branch=main",
+    "Link": "https://learn.microsoft.com/en-us/azure/sap/automation/configure-system",
     "Parameters": [
       {
         "Name": "IsDefault",
@@ -15,7 +15,7 @@
   },
   {
     "Section": "Subscription *",
-    "Link": "https://learn.microsoft.com/en-us/azure/virtual-machines/workloads/sap/automation-configure-system?branch=main",
+    "Link": "https://learn.microsoft.com/en-us/azure/sap/automation/configure-system",
     "Parameters": [
       {
         "Name": "subscription",
@@ -29,7 +29,7 @@
           }
         ],
         "Overrules": "",
-        "Display": 3
+        "Display": 1
       }
     ]
   },
@@ -59,35 +59,10 @@
     "Parameters": [
       {
         "Name": "environment",
-        "Required": true,
+        "Required": false,
         "Description": "Identifier for the workload zone, used for partitioning the environments. For example 'DEV', 'QA', 'PROD', 'TEST', etc.",
-        "Type": "lookup",
-        "Options": [
-          {
-            "Text": "Select an environment...",
-            "Value": ""
-          },
-          {
-            "Text": "Development",
-            "Value": "DEV"
-          },
-          {
-            "Text": "Sandbox",
-            "Value": "SND"
-          },
-          {
-            "Text": "Prototype",
-            "Value": "PROTO"
-          },
-          {
-            "Text": "Non Production",
-            "Value": "NP"
-          },
-          {
-            "Text": "Production",
-            "Value": "PROD"
-          }
-        ],
+        "Type": "textbox",
+        "Options": [],
         "Overrules": "",
         "Display": 1
       },
@@ -102,6 +77,15 @@
             "Value": ""
           }
         ],
+        "Overrules": "",
+        "Display": 1
+      },
+      {
+        "Name": "locationCode",
+        "Required": false,
+        "Description": "The SDAF short code for the location.",
+        "Type": "field",
+        "Options": [],
         "Overrules": "",
         "Display": 1
       },
@@ -125,7 +109,7 @@
       },
       {
         "Name": "network_logical_name",
-        "Required": true,
+        "Required": false,
         "Description": "Used in the naming convention and should map to the workload virtual network logical name.",
         "Type": "field",
         "Options": [],
@@ -279,6 +263,60 @@
         "Display": 2
       },
       {
+        "Name": "suse_subscription_id",
+        "Required": false,
+        "Description": "Defines the SUSE subscription ID to use for registering the SUSE VMs with the SUSE subscription management service",
+        "Type": "field",
+        "Options": [],
+        "Overrules": "",
+        "Display": 2
+      },
+      {
+        "Name": "AFS_enable_encryption_in_transit",
+        "Required": false,
+        "Description": "Defines if encryption in transit is enabled for AFS",
+        "Type": "checkbox",
+        "Options": [],
+        "Overrules": "",
+        "Display": 2
+      },
+      {
+        "Name": "disk_controller_type_database_tier",
+        "Required": false,
+        "Description": "Defines the disk controller type for the database tier VMs, supported values are 'SCSI' and 'NVMe'",
+        "Type": "lookup",
+        "Options": [
+          {
+            "Text": "SCSI",
+            "Value": "SCSI"
+          },
+          {
+            "Text": "NVMe",
+            "Value": "NVMe"
+          }
+        ],
+        "Overrules": "",
+        "Display": 2
+      },
+      {
+        "Name": "disk_controller_type_app_tier",
+        "Required": false,
+        "Description": "Defines the disk controller type for the application tier VMs, supported values are 'SCSI' and 'NVMe'",
+        "Type": "lookup",
+        "Options": [
+          {
+            "Text": "SCSI",
+            "Value": "SCSI"
+          },
+          {
+            "Text": "NVMe",
+            "Value": "NVMe"
+          }
+        ],
+        "Overrules": "",
+        "Display": 2
+      },
+      {
         "Name": "use_secondary_ips",
         "Required": false,
         "Description": "Controls if the virtual machines should be deployed with two IP addresses. Required for SAP Virtual Hostname support",
@@ -327,7 +365,6 @@
       {
         "Name": "shared_access_key_enabled_nfs",
         "Required": false,
-        "Description": "Storage account authorization using Shared Access Key (NFS shares).",
         "Description": "Storage account authorization using Shared Access Key (NFS shares).",
         "Type": "checkbox",
         "Options": [],
@@ -578,7 +615,7 @@
         "Display": 3
       },
       {
-        "Name": "database_dual_nics",
+        "Name": "db_dual_nics",
         "Required": false,
         "Description": "Defines if the database servers will have two network interfaces.",
         "Type": "checkbox",
@@ -734,6 +771,78 @@
         "Description": "If true, database will deployed with Active/Active (read enabled) configuration, only supported for HANA.",
         "Type": "checkbox",
         "Options": [],
+        "Overrules": "",
+        "Display": 3
+      },
+      {
+        "Name": "use_observer",
+        "Required": false,
+        "Description": "Defines that the observer virtual machines will be deployed.",
+        "Type": "checkbox",
+        "Options": [],
+        "Overrules": "",
+        "Display": 3
+      },
+      {
+        "Name": "observer_vm_size",
+        "Required": false,
+        "Description": "If provided overrides the Virtual Machine SKU used for the observer virtual machines.",
+        "Type": "field",
+        "Options": [
+          {
+            "Text": "",
+            "Value": ""
+          }
+        ],
+        "Overrules": "",
+        "Display": 2
+      },
+      {
+        "Name": "observer_vm_zones",
+        "Required": false,
+        "Description": "Defines the availability zones in which the observer virtual machines are deployed.",
+        "Type": "list",
+        "Options": [
+          {
+            "Text": "",
+            "Value": ""
+          },
+          {
+            "Text": "1",
+            "Value": "1"
+          },
+          {
+            "Text": "2",
+            "Value": "2"
+          },
+          {
+            "Text": "3",
+            "Value": "3"
+          }
+        ],
+        "Overrules": "",
+        "Display": 1
+      },
+      {
+        "Name": "observer_vm_tags",
+        "Required": false,
+        "Description": "Defines a list of tags to be applied to the observer virtual machine(s)",
+        "Type": "tag",
+        "Options": [],
+        "Overrules": "",
+        "Display": 3
+      },
+      {
+        "Name": "observer_nic_ips",
+        "Required": false,
+        "Description": "If provided, the observer virtual machines will be configured with the specified IP addresses.",
+        "Type": "list",
+        "Options": [
+          {
+            "Text": "",
+            "Value": ""
+          }
+        ],
         "Overrules": "",
         "Display": 3
       }
@@ -1589,9 +1698,18 @@
         "Display": 3
       },
       {
+        "Name": "use_saphanasr_angi",
+        "Required": false,
+        "Description": "If true, the SAP HANA SR cluster will be configured with SAP HANA SR - A Next Generation Interface (supported on SLES and RHEL)",
+        "Type": "checkbox",
+        "Options": [],
+        "Overrules": "",
+        "Display": 3
+      },
+      {
         "Name": "use_sles_saphanasr_angi",
         "Required": false,
-        "Description": "If true, the SAP HANA SR cluster will be configured with SAP HANA SR - An Next Generation Interface",
+        "Description": "Deprecated: Use use_saphanasr_angi instead. Retained for backward compatibility.",
         "Type": "checkbox",
         "Options": [],
         "Overrules": "",
@@ -2058,6 +2176,15 @@
         "Name": "use_random_id_for_storageaccounts",
         "Required": false,
         "Description": "Defines if the sapmnt storage account name will have a random suffix. (this decreases the risk of name conflicts)",
+        "Type": "checkbox",
+        "Options": [],
+        "Overrules": "",
+        "Display": 2
+      },
+      {
+        "Name": "AFS_usr_sap",
+        "Required": false,
+        "Description": "If defined, places /usr/sap for the application tier on the Azure Files sapmnt storage. Each application server, including the PAS, mounts its own directory on the share. Leave unchecked to keep /usr/sap on local storage.",
         "Type": "checkbox",
         "Options": [],
         "Overrules": "",

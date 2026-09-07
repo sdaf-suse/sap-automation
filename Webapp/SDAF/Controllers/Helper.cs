@@ -46,6 +46,7 @@ namespace SDAFWebApp.Controllers
                 {"francesouth", "frso"},
                 {"germanynorth", "geno"},
                 {"germanywestcentral", "gewc"},
+                {"indonesiacentral", "ince"},
                 {"japaneast", "jaea"},
                 {"japanwest", "jawe"},
                 {"jioindiacentral", "jinc"},
@@ -57,6 +58,7 @@ namespace SDAFWebApp.Controllers
                 {"norwayeast", "noea"},
                 {"norwaywest", "nowe"},
                 {"qatarcentral", "qace"},
+                {"polandcentral", "plce"},
                 {"southafricanorth", "sano"},
                 {"southafricawest", "sawe"},
                 {"southcentralus", "scus"},
@@ -71,6 +73,9 @@ namespace SDAFWebApp.Controllers
                 {"uaenorth", "uano"},
                 {"uksouth", "ukso"},
                 {"ukwest", "ukwe"},
+                {"usgovarizona", "usar"},
+                {"usgovtexas", "uste"},
+                {"usgovvirginia", "usvi"},
                 {"westcentralus", "wcus"},
                 {"westeurope", "weeu"},
                 {"westindia", "wein"},
@@ -129,7 +134,7 @@ namespace SDAFWebApp.Controllers
                         str.AppendLine($"  \"{t.Key}\" = \"{t.Value}\",");
                     }
                 }
-                str.Append("}");
+                str.Append('}');
             }
             else if (property.PropertyType.IsArray)
             {
@@ -140,7 +145,7 @@ namespace SDAFWebApp.Controllers
                     str.Append($"\"{val}\", ");
                 }
                 str.Remove(str.Length - 2, 2);
-                str.Append("]");
+                str.Append(']');
             }
             else if (property.PropertyType == typeof(Image))
             {
@@ -169,6 +174,12 @@ namespace SDAFWebApp.Controllers
                 bool b = (bool)value;
                 str.Append(property.Name + " = " + b.ToString().ToLower());
             }
+            else if (property.PropertyType == typeof(bool))
+            {
+                if (value == null) return "#" + property.Name + " = false";
+                bool b = (bool)value;
+                str.Append(property.Name + " = " + b.ToString().ToLower());
+            }
             else if (property.PropertyType == typeof(int?))
             {
                 if (value == null) return "#" + property.Name + " = 0";
@@ -178,7 +189,32 @@ namespace SDAFWebApp.Controllers
             else
             {
                 if (value == null) return "#" + property.Name + " = \"\"";
-                str.Append(property.Name + " = " + $"\"{value}\"");
+                if (property.Name == "network_address_space")
+                {
+                    string networkValue = value.ToString();
+                    string[] cidrValues = networkValue
+                        .Split(new[] { '-', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(v => v.Trim())
+                        .Where(v => !string.IsNullOrWhiteSpace(v))
+                        .ToArray();
+
+                    str.Append(property.Name + " = " + $"[{string.Join(",", cidrValues.Select(v => $"\"{v}\""))}]");
+                }
+                else if (property.PropertyType == typeof(string))
+                {
+                    if (property.Name.StartsWith("MD_"))
+                    {
+                        str.Append($"{value}");
+                    }
+                    else
+                    {
+                        str.Append(property.Name + " = " + $"\"{value}\"");
+                    }
+                }
+                else
+                {
+                    str.Append(property.Name + " = " + $"\"{value}\"");
+                }
             }
 
             return str.ToString();
@@ -245,15 +281,40 @@ namespace SDAFWebApp.Controllers
         public static string MapRegion(string region)
         {
             if (region == null) return "";
-            if (regionMapping.ContainsKey(region))
+            if (regionMapping.TryGetValue(region, out string mappedRegion))
             {
-                return regionMapping[region];
+                return mappedRegion;
             }
             else
             {
                 throw new KeyNotFoundException("location is not a valid Azure region");
             }
         }
+
+        /// <summary>
+        /// Makes a caller-supplied value safe to write to a log sink by stripping
+        /// line-breaking characters and capping the length.
+        /// </summary>
+        /// <param name="value">The untrusted value to sanitize.</param>
+        /// <returns>A single-line, length-bounded representation of <paramref name="value"/>.</returns>
+        public static string SanitizeForLog(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+
+            const int maxLength = 256;
+            StringBuilder sanitized = new(Math.Min(value.Length, maxLength));
+            foreach (char c in value)
+            {
+                if (sanitized.Length >= maxLength) break;
+                // char.IsControl does not cover U+2028/U+2029.
+                bool isLineBreaking = char.IsControl(c) || c == '\u2028' || c == '\u2029';
+                sanitized.Append(isLineBreaking ? '_' : c);
+            }
+
+            if (value.Length > maxLength) sanitized.Append("...");
+            return sanitized.ToString();
+        }
+
         public static async Task<byte[]> ProcessFormFile(IFormFile formFile,
             ModelStateDictionary modelState, string[] permittedExtensions,
             long sizeLimit)
@@ -266,7 +327,7 @@ namespace SDAFWebApp.Controllers
             // a display name.
             MemberInfo property =
                 typeof(FileUploadModel).GetProperty(
-                    formFile.Name[(formFile.Name.IndexOf(".", StringComparison.Ordinal) + 1)..]);
+                    formFile.Name[(formFile.Name.IndexOf('.') + 1)..]);
 
             if (property != null)
             {
@@ -339,7 +400,7 @@ namespace SDAFWebApp.Controllers
                     $"Please contact the Help Desk for support. Error: {ex.HResult}");
             }
 
-            return Array.Empty<byte>();
+            return [];
         }
 
         private static bool IsValidFileExtension(string fileName, Stream data, string[] permittedExtensions)
@@ -361,34 +422,40 @@ namespace SDAFWebApp.Controllers
 
         public static string TfvarToJson(string hclString)
         {
-            StringReader stringReader = new(hclString);
+            using StringReader stringReader = new(hclString);
             StringBuilder jsonString = new();
             jsonString.AppendLine("{");
+            string jsonFormattedOutput;
             while (true)
             {
                 string currLine = stringReader.ReadLine();
                 if (currLine == null)
                 {
-                    jsonString.Remove(jsonString.Length - 3, 1);
-                    jsonString.AppendLine("}");
+                    while (jsonString.Length > 0 && (jsonString[^1] == ',' || jsonString[^1] == '\n' || jsonString[^1] == '\r' || char.IsWhiteSpace(jsonString[^1])))
+                    {
+                        jsonString.Length--;
+                    }
+
+                    jsonString.Append('}');
+                    jsonFormattedOutput = jsonString.ToString();
                     break;
                 }
-                else if (currLine.StartsWith("#") || currLine == "")
+                else if (currLine.StartsWith('#') || currLine == "")
                 {
                     continue;
                 }
-                else if (currLine.StartsWith("}"))
+                else if (currLine.StartsWith('}'))
                 {
                     jsonString.Remove(jsonString.Length - 3, 1);
                     jsonString.AppendLine("},");
                 }
                 else
                 {
-                    int equalIndex = currLine.IndexOf("=");
+                    int equalIndex = currLine.IndexOf('=');
                     if (equalIndex >= 0)
                     {
                         string key = currLine[..equalIndex].Trim();
-                        if (!key.StartsWith("\""))
+                        if (!key.StartsWith('\"'))
                         {
                             key = "\"" + key + "\"";
                         }
@@ -396,24 +463,24 @@ namespace SDAFWebApp.Controllers
                         Console.WriteLine(key);
                         if (key.EndsWith("tags\""))
                         {
-                            value += "[";
+                            StringBuilder valueBuilder = new();
+                            valueBuilder.Append('[');
                             currLine = stringReader.ReadLine();
-                            while (!currLine.StartsWith("}"))
+                            while (!currLine.StartsWith('}'))
                             {
-                                equalIndex = currLine.IndexOf("=");
+                                equalIndex = currLine.IndexOf('=');
                                 var tagKey = currLine[..equalIndex].Trim();
-                                if (!tagKey.StartsWith("\""))
+                                if (!tagKey.StartsWith('"'))
                                 {
                                     tagKey = "\"" + tagKey + "\"";
                                 }
                                 var tagValue = currLine[(equalIndex + 1)..].Trim();
-                                value += "{";
-                                value += "\"Key\":" + tagKey + "," + "\"Value\":" + tagValue.Trim(',');
-                                value += "},";
+                                valueBuilder.Append('{');
+                                valueBuilder.Append("\"Key\":").Append(tagKey).Append(',').Append("\"Value\":").Append(tagValue.Trim(','));
+                                valueBuilder.Append("},");
                                 currLine = stringReader.ReadLine().TrimStart();
                             }
-                            value = value.Trim(',');
-                            value += "],";
+                            value = valueBuilder.ToString().Trim(',') + "],";
                         }
                         else if (key.ToLower() == "\"network_address_space\"")
                         {
@@ -424,45 +491,45 @@ namespace SDAFWebApp.Controllers
                             }
                             else
                             {
-                                string fixedValue = value.Replace('[', ' ').Replace(']', ' ');
+                                string fixedValue = value.Replace('[', ' ').Replace(']', ' ').Replace(',', '-');
                                 value = fixedValue.Trim() + ",";
                             }
 
                         }
                         else if (key.EndsWith("configuration_settings\""))
                         {
-                            value += "[";
+                            StringBuilder valueBuilder = new();
+                            valueBuilder.Append('[');
                             currLine = stringReader.ReadLine();
-                            while (!currLine.StartsWith("}"))
+                            while (!currLine.StartsWith('}'))
                             {
-                                equalIndex = currLine.IndexOf("=");
+                                equalIndex = currLine.IndexOf('=');
                                 var tagKey = currLine[..equalIndex].Trim();
-                                if (!tagKey.StartsWith("\""))
+                                if (!tagKey.StartsWith('\"'))
                                 {
                                     tagKey = "\"" + tagKey + "\"";
                                 }
                                 var tagValue = currLine[(equalIndex + 1)..].Trim();
-                                value += "{";
-                                value += "\"Key\":" + tagKey + "," + "\"Value\":" + tagValue.Trim(',');
-                                value += "},";
+                                valueBuilder.Append('{');
+                                valueBuilder.Append("\"Key\":").Append(tagKey).Append(',').Append("\"Value\":").Append(tagValue.Trim(','));
+                                valueBuilder.Append("},");
                                 currLine = stringReader.ReadLine();
                             }
-                            value = value.Trim(',');
-                            value += "],";
+                            value = valueBuilder.ToString().Trim(',') + "],";
                         }
                         else
                         {
                             value = currLine[(equalIndex + 1)..].Trim();
-                            if (!value.EndsWith(",") && !value.EndsWith("{"))
+                            if (!value.EndsWith(',') && !value.EndsWith('{'))
                             {
                                 value += ",";
                             }
                         }
-                        if (value != null) jsonString.AppendLine(key + ":" + value);
+                        if (value != null && key != null) jsonString.AppendLine(key + ":" + value);
                     }
                 }
             }
-            return jsonString.ToString();
+            return jsonFormattedOutput;
         }
 
         public static async Task<AppFile> GetImagesFile(ITableStorageService<AppFile> appFileService)

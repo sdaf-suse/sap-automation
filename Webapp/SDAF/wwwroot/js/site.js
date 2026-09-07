@@ -274,26 +274,43 @@ function updateAndSetDropdowns(dropdown) {
 }
 
 // populate environment dropdown with values from ADO if pipeline deployment
-function getEnvironmentsFromAdo(isPipelineDeployment) {
-    var id = "environment";
-    if (isPipelineDeployment) {
-        $.ajax({
-            type: "GET",
-            url: "/Environment/GetEnvironments",
-            data: {},
-            success: function (data) {
-                resetDropdowns([id]);
-                populateAzureDropdownData(id, data);
-                setCurrentValue(id);
-            },
-            error: function () { alert("Error retrieving existing environments from ADO"); }
-        });
+function getEnvironments(isPipelineDeployment, platform) {
+    var id = "workload";
+  if (isPipelineDeployment) {
+
+
+    if (platform == "ado") {
+      $.ajax({
+        type: "GET",
+        url: "/Environment/GetEnvironments",
+        data: {},
+        success: function (data) {
+          resetDropdowns([id]);
+          populateAzureDropdownData(id, data);
+          setCurrentValue(id);
+        },
+        error: function () { alert("Error retrieving existing environments from ADO"); }
+      });
     }
+    if (platform == "github") {
+      $.ajax({
+        type: "GET",
+        url: "/GitHubEnvironment/GetEnvironments",
+        data: {},
+        success: function (data) {
+          resetDropdowns([id]);
+          populateAzureDropdownData(id, data);
+          setCurrentValue(id);
+        },
+        error: function () { alert("Error retrieving existing environments from GitHub"); }
+      });
+    }
+  }
 }
 
 // populate a dropdown with data
 function populateAzureDropdownData(id, data) {
-    for (i = 0; i < data.length; i++) {
+    for (var i = 0; i < data.length; i++) {
         $("#" + id).append($("<option />").val(data[i].value).text(data[i].text));
     }
 }
@@ -321,7 +338,7 @@ function setCurrentValue(id) {
 
 // populate an input parameter that accepts lists as data
 function populateListData(id, data) {
-    for (j = 0; j < data.length; j++) {
+    for (var j = 0; j < data.length; j++) {
         if ($("#" + id + " option[value='" + data[j] + "']").length <= 0) {
             $("#" + id).append($("<option />").val(data[j]).text(data[j]));
         }
@@ -349,7 +366,7 @@ function resetDropdowns(ids) {
 function setDataFromResource() {
     if (model["subscription"] == null || model["network_arm_id"] == null) {
         var alreadySetArmId = null;
-        for (i = 3; i < azureResourceIds.length; i++) {
+        for (var i = 3; i < azureResourceIds.length; i++) {
             var currArmId = azureResourceIds[i];
             if (model[currArmId] != null) {
                 alreadySetArmId = model[currArmId];
@@ -451,7 +468,7 @@ function populateLocations(id, value) {
 // EVENT LISTENERS
 // ===============
 
-$("#subscription_id").on("change", function () {
+$("#subscription").on("change", function () {
     var subscriptionid = $(this).val();
     var dropdownsAffected = [
         {
@@ -597,30 +614,22 @@ $("#network_arm_id").on("change", function () {
 });
 
 $("#workload_zone").on("change", function () {
-    var workloadzoneid = $(this).val();
-    if (workloadzoneid) {
-        var confirmMessage = "Are you sure? Selecting this value will populate certain inputs with values from the workload zone: " + workloadzoneid;
-        if (confirm(confirmMessage)) {
-            $.ajax({
-                type: "GET",
-                url: "/Landscape/GetByIdJson",
-                data: {
-                    id: workloadzoneid,
-                },
-                success: function (data) {
-                    entireLandscape = JSON.parse(data);
-                    partialLandscape = {};
-                    partialLandscape["location"] = entireLandscape["location"];
-                    partialLandscape["environment"] = entireLandscape["environment"];
-                    partialLandscape["network_logical_name"] = entireLandscape["network_logical_name"];
-                    updateModel(partialLandscape);
-                },
-                error: function () { alert("Error populating data for given workload zone"); }
-            });
-        } else {
-            $("#workload_zone").val(null);
-        }
+  var workloadzoneid = $(this).val();
+  if (workloadzoneid) {
+    var environmentVal = workloadzoneid.split("-")[0];
+    var networkLogicalNameVal = workloadzoneid.split("-")[2];
+    var locationVal = workloadzoneid.split("-")[1];
+    var confirmMessage = "Are you sure? Selecting this value will populate certain inputs with values from the workload zone: " + workloadzoneid;
+    if (confirm(confirmMessage)) {
+      $("#environment").val(environmentVal);
+      $("#network_logical_name").val(networkLogicalNameVal);
+      $("#locationCode").val(locationVal);
+
     }
+    else {
+      $("#workload_zone").val(null);
+    }
+  }
 });
 
 $("#database_platform").on("change", function () {
@@ -693,7 +702,7 @@ function toggleDisableViaCheckbox(checkbox, id) {
 }
 
 function toggleDisableViaNInputs(inputList, id) {
-    for (i = 0; i < inputList.length; i++) {
+    for (var i = 0; i < inputList.length; i++) {
         var input = inputList[i];
         if ($("#" + input).val()) continue;
         else break;
@@ -772,3 +781,27 @@ function filterResults(searchText) {
 jQuery.expr[':'].Contains = function (a, i, m) {
     return jQuery(a).text().toUpperCase().indexOf(m[3].toUpperCase()) >= 0;
 };
+
+
+document.addEventListener('DOMContentLoaded', function () {
+  const notifications = document.querySelectorAll('.notificationContainer[data-timeout]');
+
+  notifications.forEach(notification => {
+    const timeout = parseInt(notification.getAttribute('data-timeout')) || 5000;
+
+    // Close button handler
+    const closeBtn = notification.querySelector('.close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+      });
+    }
+
+    // Auto-dismiss
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      setTimeout(() => notification.remove(), 300);
+    }, timeout);
+  });
+});

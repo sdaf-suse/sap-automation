@@ -23,21 +23,13 @@ using System.Collections.Concurrent;
 
 namespace SDAFWebApp.Controllers
 {
-    public class FileController : Controller
+    public class FileController(ITableStorageService<AppFile> appFileService, ITableStorageService<LandscapeEntity> landscapeService,
+        ITableStorageService<SystemEntity> systemService, IConfiguration configuration) : Controller
     {
-        private readonly ITableStorageService<AppFile> _appFileService;
-        private readonly ITableStorageService<LandscapeEntity> _landscapeService;
-        private readonly ITableStorageService<SystemEntity> _systemService;
-        private readonly RestHelper restHelper;
-
-        public FileController(ITableStorageService<AppFile> appFileService, ITableStorageService<LandscapeEntity> landscapeService,
-            ITableStorageService<SystemEntity> systemService, IConfiguration configuration)
-        {
-            _appFileService = appFileService;
-            _landscapeService = landscapeService;
-            _systemService = systemService;
-            restHelper = new RestHelper(configuration, "GIT");
-        }
+        private readonly ITableStorageService<AppFile> _appFileService = appFileService;
+        private readonly ITableStorageService<LandscapeEntity> _landscapeService = landscapeService;
+        private readonly ITableStorageService<SystemEntity> _systemService = systemService;
+        private readonly RestHelper restHelper = new RestHelper(configuration, "GIT");
 
         [ActionName("Index")]
         public async Task<IActionResult> Index()
@@ -48,16 +40,26 @@ namespace SDAFWebApp.Controllers
         [ActionName("Templates")]
         public ActionResult Templates(string sourceController)
         {
-            string[] landscapeFilePaths = restHelper.GetTemplateFileNames("Terraform/WORKSPACES/LANDSCAPE").Result;
-            string[] systemFilePaths = restHelper.GetTemplateFileNames("Terraform/WORKSPACES/SYSTEM").Result;
+            try
+            {
+                string[] landscapeFilePaths = restHelper.GetTemplateFileNames("Terraform/WORKSPACES/LANDSCAPE").Result;
+                string[] systemFilePaths = restHelper.GetTemplateFileNames("Terraform/WORKSPACES/SYSTEM").Result;
 
-            Dictionary<string, string[]> filePaths = new()
-      {
+                Dictionary<string, string[]> filePaths = new()
+            {
                 { "landscapes", landscapeFilePaths },
                 { "systems", systemFilePaths }
             };
-            ViewBag.SourceController = sourceController;
-            return View(filePaths);
+                ViewBag.SourceController = sourceController;
+                return View(filePaths);
+            }
+            catch (Exception e)
+            {
+                TempData["error"] = "Error retrieving templates: " + e.Message;
+            }
+            return RedirectToAction("Index");
+
+
         }
 
         [ActionName("UseTemplate")]
@@ -78,6 +80,7 @@ namespace SDAFWebApp.Controllers
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [ActionName("Upload")]
         public async Task<IActionResult> UploadAsync(FileUploadModel fileUpload, string sourceController)
         {
@@ -406,6 +409,7 @@ namespace SDAFWebApp.Controllers
                 AppFile file = (isImagesFile) ? await GetImagesFile(fileName, 0, GetPartitionKey(id)) : await _appFileService.GetByIdAsync(id, GetPartitionKey(id));
                 if (file == null) return NotFound();
 
+                // FileStreamResult takes ownership of the stream and disposes it after writing the response.
                 var stream = new MemoryStream(file.Content);
                 return new FileStreamResult(stream, new MediaTypeHeaderValue("text/plain"))
                 {
@@ -419,7 +423,7 @@ namespace SDAFWebApp.Controllers
             }
         }
 
-        private string GetPartitionKey(string id)
+        private static string GetPartitionKey(string id)
         {
             return id[..id.IndexOf('-')];
         }
@@ -446,7 +450,7 @@ namespace SDAFWebApp.Controllers
                     type = 2;
                 }
 
-                if (newName.Contains("..") || newName.Contains("/") || newName.Contains("\\"))
+                if (newName.Contains("..") || newName.Contains('/') || newName.Contains('\\'))
                 {
                     throw new Exception("Invalid filename");
                 }

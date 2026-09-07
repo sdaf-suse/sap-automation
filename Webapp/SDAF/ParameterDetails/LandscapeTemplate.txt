@@ -1,3 +1,27 @@
+#########################################################################################
+#                                                                                       #
+# Workload zone description                                                             #
+#                                                                                       #
+$$MD_Region$$
+$$MD_Zone$$
+#                                                                                       #
+$$MD_VNet$$
+$$MD_AppSubnet$$
+$$MD_DbSubnet$$
+$$MD_WebSubnet$$
+$$MD_AdminSubnet$$
+$$MD_ANFSubnet$$
+$$MD_StorageSubnet$$
+$$MD_ISCSISubnet$$
+#                                                                                       #
+$$MD_KeyVault$$
+$$MD_NAT$$
+#                                                                                       #
+$$MD_ISCSIServers$$
+$$MD_NFS$$
+#                                                                                       #
+#########################################################################################
+
 
 #########################################################################################
 #                                                                                       #
@@ -274,6 +298,9 @@ $$storage_subnet_nsg_arm_id$$
 # storage_subnet_nsg_name is an optional parameter and should only be used if the default naming is not acceptable for the network security group name
 $$storage_subnet_nsg_name$$
 
+# use_separate_storage_subnet defines if a separate subnet is used (HANA Scale Out scenario)
+$$use_separate_storage_subnet$$
+
 #########################################################################################
 #                                                                                       #
 #  Common Virtual Machine settings                                                      #
@@ -294,7 +321,6 @@ $$patch_mode$$
 
 # If defined, defines the mode of VM Guest Patching for the Virtual Machines
 $$patch_assessment_mode$$
-
 
 #########################################################################################
 #                                                                                       #
@@ -474,6 +500,9 @@ $$NFS_provider$$
 # use_AFS_for_shared_storage defines if shared media is on AFS even when using ANF for data
 $$use_AFS_for_shared_storage$$
 
+# Defines if encryption in transit is enabled for AFS on NFS shares
+$$AFS_enable_encryption_in_transit$$
+
 #########################################################################################
 #                                                                                       #
 #  Azure NetApp files support                                                           #
@@ -617,6 +646,9 @@ $$utility_vm_image$$
 
 # Defines if the utility virtual machine IP
 $$utility_vm_nic_ips$$
+
+# Defines the Availability zones for the utility virtual machines
+$$utility_vm_zones$$
 
 ############################################################################################
 #                                                                                          #

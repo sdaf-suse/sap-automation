@@ -43,6 +43,7 @@ parameters:
       - FRSO
       - GENO
       - GEWC
+      - INCE
       - JAEA
       - JAWE
       - JINC
@@ -67,6 +68,9 @@ parameters:
       - UANO
       - UKSO
       - UKWE
+      - USAR
+      - USTE
+      - USVI
       - WCUS
       - WEEU
       - WEIN
