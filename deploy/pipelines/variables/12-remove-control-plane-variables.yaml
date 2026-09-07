@@ -18,11 +18,11 @@ variables:
   - group:                             "SDAF-General"
   - group:                             SDAF-${{ parameters.deployer_environment }}
 
-  - name:                              parent_variable_group
+  - name:                              variable_group
     value:                             SDAF-${{ parameters.deployer_environment }}
 
   - name:                              run_on
-    value:                             $[replace(replace('True',eq(${{ parameters.use_deployer }}, 'True'), variables['POOL']),'True',variables['Agent'])]
+    value:                             $[replace(replace('True',eq(${{ parameters.use_deployer }}, 'True'), variables['POOL']),'True',variables['AGENT'])]
 
   - name:                              deployer_foldername
     value:                             ${{ parameters.deployer }}
@@ -40,10 +40,13 @@ variables:
     value:                             https://releases.hashicorp.com/terraform/$(tf_version)/terraform_$(tf_version)_linux_amd64.zip
 
   - name:                              run_on
-    value:                             $[replace(replace('True',eq(${{ parameters.use_deployer }}, 'True'), variables['POOL']),'True',variables['Agent'])]
+    value:                             $[replace(replace('True',eq(${{ parameters.use_deployer }}, 'True'), variables['POOL']),'True',variables['AGENT'])]
 
   - name:                              this_agent
     value:                             $[lower(variables['run_on'])]
 
   - name:                              connection_name
     value:                             ${{ parameters.connection_name }}
+
+  - name:                              deployer_environment
+    value:                             ${{ parameters.deployer_environment }}

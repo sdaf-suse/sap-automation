@@ -44,28 +44,30 @@ function configureNonDeployer() {
 	reset="\e[0m"
 	local tf_version=$1
 	local tf_url="https://releases.hashicorp.com/terraform/${tf_version}/terraform_${tf_version}_linux_amd64.zip"
-	echo -e "$green--- Install dos2unix ---$reset"
-	sudo apt-get -qq install dos2unix
 
-	sudo apt-get -qq install zip
+	if ! which terraform; then
+		if [ -n "$tf_version" ]; then
+			echo -e "$green--- Install Terraform version $tf_version ---$reset"
+			tf_url="https://releases.hashicorp.com/terraform/${tf_version}/terraform_${tf_version}_linux_amd64.zip"
+		else
+			echo -e "$green--- Install latest Terraform ---$reset"
+			tf_version=$(curl -s https://checkpoint-api.hashicorp.com/v1/check/terraform | jq -r '.current_version')
+			tf_url="https://releases.hashicorp.com/terraform/${tf_version}/terraform_${tf_version}_linux_amd64.zip"
+		fi
 
-	echo -e "$green --- Install terraform ---$reset"
-
-	wget -q "$tf_url"
-	return_code=$?
-	if [ 0 != $return_code ]; then
-		echo "##vso[task.logissue type=error]Unable to download Terraform version $tf_version."
-		exit 2
+		wget -q "$tf_url"
+		return_code=$?
+		if [ 0 != $return_code ]; then
+			echo "##vso[task.logissue type=error]Unable to download Terraform version $tf_version."
+			exit 2
+		fi
+		unzip -qq "terraform_${tf_version}_linux_amd64.zip"
+		sudo mv terraform /bin/
+		rm -f "terraform_${tf_version}_linux_amd64.zip"
 	fi
-	unzip -qq "terraform_${tf_version}_linux_amd64.zip"
-	sudo mv terraform /bin/
-	rm -f "terraform_${tf_version}_linux_amd64.zip"
-
-	az extension add --name storage-blob-preview --allow-preview true --output none >/dev/null
-
 }
 
-function LogonToAzure() {
+function ObsoleteLogonToAzure() {
 	local useMSI=$1
 	local subscriptionId=$ARM_SUBSCRIPTION_ID
 
@@ -73,10 +75,33 @@ function LogonToAzure() {
 		echo "Deployment credentials:              Service Principal"
 		echo "Deployment credential ID (SPN):      $ARM_CLIENT_ID"
 		unset ARM_USE_MSI
-		az login --service-principal --client-id "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID" --output none
+# <BEGIN> MKD 20260217
+# AZ CLI 2.83 - syntax for --service-principal user --username NOT --client-id
+		# az login --service-principal --client-id "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID" --output none
+		az login --service-principal --username "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID" --output none
+# <END>   MKD 20260217
+		echo "Logged on as:"
+		az account show --query user --output table
+		TF_VAR_use_spn=true
+		export TF_VAR_use_spn
+
 	else
 		echo "Deployment credentials:              Managed Service Identity"
-		source "/etc/profile.d/deploy_server.sh"
+		if [ -v ARM_CLIENT_ID ]; then
+		    echo "$ARM_CLIENT_ID"
+		  	az login --identity --allow-no-subscriptions --client-id "$ARM_CLIENT_ID" --output none
+		else
+				if [ -f "/etc/profile.d/deploy_server.sh" ]; then
+						echo "Sourcing deploy_server.sh to set up environment variables for MSI authentication"
+						source "/etc/profile.d/deploy_server.sh"
+						az login --identity --allow-no-subscriptions --client-id "$ARM_CLIENT_ID" --output none
+				fi
+		fi
+
+		az account show --query user --output table
+
+		TF_VAR_use_spn=false
+		export TF_VAR_use_spn
 
 		# sourcing deploy_server.sh overwrites ARM_SUBSCRIPTION_ID with control plane subscription id
 		# ensure we are exporting the right ARM_SUBSCRIPTION_ID when authenticating against workload zones.
@@ -113,6 +138,7 @@ function get_region_from_code() {
 	"GENO") LOCATION_IN_FILENAME="germanynorth" ;;
 	"GEWE") LOCATION_IN_FILENAME="germanywest" ;;
 	"GEWC") LOCATION_IN_FILENAME="germanywestcentral" ;;
+	"INCE") LOCATION_IN_FILENAME="indonesiacentral" ;;
 	"ISCE") LOCATION_IN_FILENAME="israelcentral" ;;
 	"ITNO") LOCATION_IN_FILENAME="italynorth" ;;
 	"JAEA") LOCATION_IN_FILENAME="japaneast" ;;
@@ -141,6 +167,9 @@ function get_region_from_code() {
 	"UANO") LOCATION_IN_FILENAME="uaenorth" ;;
 	"UKSO") LOCATION_IN_FILENAME="uksouth" ;;
 	"UKWE") LOCATION_IN_FILENAME="ukwest" ;;
+	"USAR") LOCATION_IN_FILENAME="usgovarizona" ;;
+	"USTE") LOCATION_IN_FILENAME="usgovtexas" ;;
+	"USVI") LOCATION_IN_FILENAME="usgovvirginia" ;;
 	"WCUS") LOCATION_IN_FILENAME="westcentralus" ;;
 	"WEEU") LOCATION_IN_FILENAME="westeurope" ;;
 	"WEIN") LOCATION_IN_FILENAME="westindia" ;;
