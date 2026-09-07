@@ -55,9 +55,13 @@ function Remove-SDAFADOProject {
     [ValidateNotNullOrEmpty()]
     [string]$AdoProject,
 
-    [Parameter(Mandatory = $false, HelpMessage = "Azure DevOps project name")]
+    [Parameter(Mandatory = $false, HelpMessage = "Control Plane Code (e.g., MGMT)")]
     [ValidateNotNullOrEmpty()]
     [string]$ControlPlaneCode,
+
+    [Parameter(Mandatory = $false, HelpMessage = "Control Plane Name (e.g., MGMT-WEEU-DEP01)")]
+    [ValidateNotNullOrEmpty()]
+    [string]$ControlPlaneName = "",
 
     [Parameter(Mandatory = $true, HelpMessage = "Authentication method to use")]
     [ValidateSet("Service Principal", "Managed Identity")]
@@ -92,12 +96,17 @@ function Remove-SDAFADOProject {
 
       #region Initialize variables
       Write-Verbose "Initializing variables from parameters"
-      $VersionLabel = "v3.15.0.0"
+      $VersionLabel = "v3.23.0.0"
       Write-Verbose "Version label set to: $VersionLabel"
       #endregion
 
-      $ControlPlanePrefix = "SDAF-" + $ControlPlaneCode
-      Write-Verbose "Control plane prefix: $ControlPlanePrefix"
+      #region Set up prefixes and pool names
+      if ($ControlPlaneName.Length -eq 0) {
+        $ControlPlanePrefix = "SDAF-" + $ControlPlaneCode
+      }
+      else {
+        $ControlPlanePrefix = "SDAF-" + $ControlPlaneName
+      }
 
       $ApplicationName = ""
       if ($EnableWebApp) {
@@ -110,6 +119,7 @@ function Remove-SDAFADOProject {
       if ($EnableWebApp) {
         Write-Verbose "  Application name: $ApplicationName"
       }
+      #endregion
 
       #region Install DevOps extensions
       Write-Host "Installing the DevOps extensions" -ForegroundColor Green
@@ -225,6 +235,37 @@ function Remove-SDAFADOProject {
         }
       }
 
+      $federatedIdentityName = "$AdoProject-Control_Plane_Service_Connection"
+
+      $FoundFederatedIdentity = (az ad app list --all --filter "startswith(displayName, '$federatedIdentityName')" --query  "[?displayName=='$federatedIdentityName'].id | [0]" --only-show-errors)
+      if ($FoundFederatedIdentity.Length -ne 0) {
+        $confirmation = Read-Host "Remove App registration ($federatedIdentityName) y/n?"
+        if ($confirmation -eq 'y') {
+          Write-Host "Removing the App Registration : $federatedIdentityName" -ForegroundColor Green
+          az ad app delete --id $FoundFederatedIdentity
+
+          $uri = "https://graph.microsoft.com/v1.0/directory/deletedItems/microsoft.graph.application?`$filter=displayName eq '$federatedIdentityName'&`$select=id,appId,displayName,deletedDateTime"
+          $deleted = az rest --method GET --url $uri | ConvertFrom-Json
+          if (-not $deleted.value -or $deleted.value.Count -eq 0) {
+            Write-Host "No deleted app found to purge." -ForegroundColor DarkYellow
+          }
+          else {
+            foreach ($d in $deleted.value) {
+              Write-Host "Purging deleted app: $($d.displayName) | appId=$($d.appId) | deletedObjectId=$($d.id)" -ForegroundColor Red
+              az rest --method DELETE --url "https://graph.microsoft.com/v1.0/directory/deletedItems/$($d.id)" | Out-Null
+            }
+
+          }
+
+          Write-Host "Purge complete." -ForegroundColor Green
+          $deletedAppId = $deleted.value[0].id
+          Write-Host "Purging deleted app with id: $deletedAppId" -ForegroundColor Green
+          az ad app delete --id $deletedAppId --only-show-errors
+        }
+      }
+      else {
+        Write-Host "Skipping removal of App registration" $federatedIdentityName -ForegroundColor Yellow
+      }
 
       $FoundAppRegistration = (az ad app list --all --filter "startswith(displayName, '$ApplicationName')" --query  "[?displayName=='$ApplicationName'].id | [0]" --only-show-errors)
       if ($FoundAppRegistration.Length -ne 0) {
@@ -234,7 +275,7 @@ function Remove-SDAFADOProject {
           az ad app delete --id $FoundAppRegistration
         }
         else {
-          Write-Host "Skipping removal of App registration" $ServicePrincipalName -ForegroundColor Yellow
+          Write-Host "Skipping removal of App registration" $ApplicationName -ForegroundColor Yellow
         }
       }
       else {
@@ -243,7 +284,7 @@ function Remove-SDAFADOProject {
       #endregion
 
       Write-Host "The script has completed" -ForegroundColor Green
-      Write-Verbose "New-SDAFADOProject cmdlet completed successfully"
+      Write-Verbose "Remove-SDAFADOProject cmdlet completed successfully"
 
     }
     catch {

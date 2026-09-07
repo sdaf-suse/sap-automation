@@ -12,7 +12,7 @@
 #
 # As part of doing so it will:
 #
-#   * Installs the specifed version of terraform so that it
+#   * Installs the specified version of terraform so that it
 #     is available for all users.
 #
 #   * Installs the Azure CLI using the provided installer
@@ -65,7 +65,7 @@ export local_user=$USER
 #
 
 if [ -z "${TF_VERSION}" ]; then
-	TF_VERSION="1.11.3"
+	TF_VERSION="1.14.6"
 fi
 
 # Fail if attempting to access and unset variable or parameter
@@ -234,7 +234,7 @@ pkg_mgr_install() {
 # Directories and paths
 #
 
-# Ansible installation directories
+# Ansible installation directories and paths
 ansible_base=/opt/ansible
 ansible_bin="${ansible_base}/bin"
 ansible_venv="${ansible_base}/venv/${ansible_version}"
@@ -242,12 +242,18 @@ ansible_venv_bin="${ansible_venv}/bin"
 ansible_collections="${ansible_base}/collections"
 ansible_pip3="${ansible_venv_bin}/pip3"
 
+# Git repository settings
+organization="${ORGANIZATION:-Azure}"
+branch="${BRANCH:-main}"
+
 # Azure SAP Automated Deployment directories
 asad_home="${HOME}/Azure_SAP_Automated_Deployment"
 asad_ws="${asad_home}/WORKSPACES"
-asad_repo="https://github.com/Azure/sap-automation.git"
-asad_sample_repo="https://github.com/Azure/sap-automation-samples.git"
-asad_dir="${asad_home}/$(basename ${asad_repo} .git)"
+
+asad_automation_repo="https://github.com/${organization}/sap-automation.git"
+asad_automation_dir="${asad_home}/$(basename ${asad_automation_repo} .git)"
+
+asad_sample_repo="https://github.com/${organization}/sap-automation-samples.git"
 asad_sample_dir="${asad_home}/samples"
 
 # Terraform installation directories
@@ -255,7 +261,8 @@ tf_base=/opt/terraform
 tf_dir="${tf_base}/terraform_${tfversion}"
 tf_bin="${tf_base}/bin"
 tf_zip="terraform_${tfversion}_linux_amd64.zip"
-
+sudo mkdir -p "${tf_base}"
+sudo chown -R "${USER}" "${tf_base}"
 #
 #Don't re-run the following if the script is already installed
 #
@@ -285,66 +292,25 @@ esac
 if [ "$(get_distro_version)" == "15.4" ]; then
 	error "Unsupported distro: ${distro_name_version} at this time."
 	exit 1
-fi
-if [ "$(get_distro_version)" == "15.5" ]; then
+elif [ "$(get_distro_version)" == "15.5" ]; then
+	error "Unsupported distro: ${distro_name_version} at this time."
+	exit 1
+elif [ "$(get_distro_version)" == "15.6" ]; then
+	error "Unsupported distro: ${distro_name_version} at this time."
+	exit 1
+elif [ "$(get_distro_version)" == "15.7" ]; then
 	error "Unsupported distro: ${distro_name_version} at this time."
 	exit 1
 fi
 
 case "$(get_distro_name_version)" in
-sles*)
+sles15*)
 	set +o errexit
 	zypper addrepo https://download.opensuse.org/repositories/network/SLE_15/network.repo
 	set -o errexit
 	;;
 esac
 
-echo "Set ansible version for specific distros"
-echo ""
-case "$(get_distro_name)" in
-ubuntu)
-	echo "we are inside ubuntu"
-	rel=$(lsb_release -a | grep Release | cut -d':' -f2 | xargs)
-	if [ "$rel" == "22.04" ]; then
-		ansible_version="2.16"
-		ansible_major="${ansible_version%%.*}"
-		ansible_minor=$(echo "${ansible_version}." | cut -d . -f 2)
-	fi
-	;;
-sles)
-	echo "we are inside sles"
-	ansible_version="2.11"
-	ansible_major="${ansible_version%%.*}"
-	ansible_minor=$(echo "${ansible_version}." | cut -d . -f 2)
-	# Ansible installation directories
-	ansible_base="/opt/ansible"
-	ansible_bin="${ansible_base}/bin"
-	ansible_venv="${ansible_base}/venv/${ansible_version}"
-	ansible_venv_bin="${ansible_venv}/bin"
-	ansible_collections="${ansible_base}/collections"
-	ansible_pip3="${ansible_venv_bin}/pip3"
-	sudo python3 -m pip install virtualenv
-	;;
-rhel)
-	echo "we are inside RHEL"
-	ansible_version="2.11"
-	ansible_major="${ansible_version%%.*}"
-	ansible_minor=$(echo "${ansible_version}." | cut -d . -f 2)
-	# Ansible installation directories
-	ansible_base="/opt/ansible"
-	ansible_bin="${ansible_base}/bin"
-	ansible_venv="${ansible_base}/venv/${ansible_version}"
-	ansible_venv_bin="${ansible_venv}/bin"
-	ansible_collections="${ansible_base}/collections"
-	ansible_pip3="${ansible_venv_bin}/pip3"
-	sudo python3 -m pip install virtualenv
-	;;
-*)
-	echo "we are in the default case statement"
-	;;
-esac
-
-echo "Ansible version: ${ansible_version}"
 # List of required packages whose names are common to all supported distros
 required_pkgs=(
 	git
@@ -353,7 +319,7 @@ required_pkgs=(
 	ca-certificates
 	curl
 	gnupg
-	dos2unix
+
 )
 
 cli_pkgs=(
@@ -375,10 +341,15 @@ ubuntu)
 	)
 	;;
 sles)
+	cli_pkgs+=(
+		azure-cli
+	)
 	required_pkgs+=(
 		curl
 		python3-pip
 		lsb-release
+		libicu77
+		python3-virtualenv
 	)
 	;;
 rhel)
@@ -413,26 +384,75 @@ pkg_mgr_refresh
 # Install required packages as determined above
 pkg_mgr_install "${required_pkgs[@]}"
 
+echo "Set ansible version for specific distros"
+echo ""
+case "$(get_distro_name)" in
+ubuntu)
+	echo "we are inside ubuntu"
+	rel=$(lsb_release -a | grep Release | cut -d':' -f2 | xargs)
+	if [ "$rel" == "22.04" ]; then
+		ansible_version="2.16"
+		ansible_major="${ansible_version%%.*}"
+		ansible_minor=$(echo "${ansible_version}." | cut -d . -f 2)
+	fi
+	;;
+sles)
+	echo "we are inside sles"
+	if [[ "$(get_distro_version)" == "16."* ]]; then
+		ansible_version="2.16"
+	else
+		ansible_version="2.11"
+	fi
+	ansible_major="${ansible_version%%.*}"
+	ansible_minor=$(echo "${ansible_version}." | cut -d . -f 2)
+	# Ansible installation directories
+	ansible_base="/opt/ansible"
+	ansible_bin="${ansible_base}/bin"
+	ansible_venv="${ansible_base}/venv/${ansible_version}"
+	ansible_venv_bin="${ansible_venv}/bin"
+	ansible_collections="${ansible_base}/collections"
+	ansible_pip3="${ansible_venv_bin}/pip3"
+	sudo python3 -m pip install virtualenv==20.26.6
+	;;
+rhel)
+	echo "we are inside RHEL"
+	ansible_version="2.16"
+	ansible_major="${ansible_version%%.*}"
+	ansible_minor=$(echo "${ansible_version}." | cut -d . -f 2)
+	# Ansible installation directories
+	ansible_base="/opt/ansible"
+	ansible_bin="${ansible_base}/bin"
+	ansible_venv="${ansible_base}/venv/${ansible_version}"
+	ansible_venv_bin="${ansible_venv}/bin"
+	ansible_collections="${ansible_base}/collections"
+	ansible_pip3="${ansible_venv_bin}/pip3"
+	sudo python3 -m pip install virtualenv==20.26.6
+	;;
+*)
+	echo "we are in the default case statement"
+	;;
+esac
+
+echo "Ansible version: ${ansible_version}"
+
+
 # # Install required packages as determined above
 # pkg_mgr_install "${distro_required_pkgs[@]}"
 
-rg_name=$(curl -H Metadata:true --noproxy "*" "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -s | jq .compute.resourceGroupName)
-
-subscription_id=$(curl -H Metadata:true --noproxy "*" "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -s | jq .compute.subscriptionId)
-
 # Prepare Azure SAP Automated Deployment folder structure
-mkdir -p \
-	"${asad_ws}"/LOCAL/"${rg_name}" \
-	"${asad_ws}"/LIBRARY \
-	"${asad_ws}"/SYSTEM \
-	"${asad_ws}"/LANDSCAPE \
-	"${asad_ws}"/DEPLOYER
+mkdir -p  "${asad_ws}/LOCAL"     \
+	        "${asad_ws}/LIBRARY"   \
+	        "${asad_ws}/SYSTEM"    \
+	        "${asad_ws}/LANDSCAPE" \
+	        "${asad_ws}/DEPLOYER"
 
 #
 # Clone Azure SAP Automated Deployment code repository
 #
-if [[ ! -d "${asad_dir}" ]]; then
-	git clone "${asad_repo}" "${asad_dir}"
+if [[ ! -d "${asad_automation_dir}" ]]; then
+	git clone "${asad_automation_repo}" "${asad_automation_dir}"
+	cd "${asad_automation_dir}"
+	git checkout "${branch}"
 fi
 
 #
@@ -440,7 +460,12 @@ fi
 #
 if [[ ! -d "${asad_sample_dir}" ]]; then
 	git clone "${asad_sample_repo}" "${asad_sample_dir}"
+	cd "${asad_sample_dir}"
+	git checkout "${branch}"
 fi
+
+chown -R "${USER}" "${asad_ws}"
+
 
 #
 # Install terraform for all users
@@ -487,12 +512,17 @@ esac
 # Install Azure CLI
 case "$(get_distro_name)" in
 ubuntu)
+	# No Azure CLI package for "plucky", use "noble" instead
+	AZ_REPO=$(lsb_release -cs)
+	if [ "$AZ_REPO" == "plucky" ]; then
+		AZ_REPO="noble"
+	fi
+
 	echo "Getting the Microsoft Key"
 	sudo mkdir -p /etc/apt/keyrings
 	curl -sLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/keyrings/microsoft.gpg >/dev/null
 	sudo chmod go+r /etc/apt/keyrings/microsoft.gpg
 
-	AZ_REPO=$(lsb_release -cs)
 	echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" |
 		sudo tee /etc/apt/sources.list.d/azure-cli.list
 
@@ -501,17 +531,7 @@ ubuntu)
 	;;
 sles)
 	set +o errexit
-	if [ -f /home/"${local_user}"/repos_configured ]; then
-		sudo zypper install -y --from azure-cli azure-cli
-	else
-		sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
-		repo_found=$(zypper repos | grep "Azure CLI")
-		if [ -z "$repo_found" ]; then
-			sudo zypper addrepo --name 'Azure CLI' --check https://packages.microsoft.com/yumrepos/azure-cli azure-cli
-		fi
-		sudo touch /home/${local_user}/repos_configured
-		sudo zypper install -y --from azure-cli azure-cli
-	fi
+  sudo zypper install -y  azure-cli
 	set -o errexit
 	;;
 rhel*)
@@ -531,18 +551,19 @@ export DOTNET_ROOT=${DOTNET_INSTALL_DIR}
 # Install dotNet
 case "$(get_distro_name)" in
 ubuntu)
-	sudo snap install dotnet-sdk --classic --channel=8.0
-	sudo snap alias dotnet-sdk.dotnet dotnet
+	sudo wget https://dot.net/v1/dotnet-install.sh -O "/home/${local_user}/dotnet-install.sh"
+	sudo chmod +x "/home/${local_user}/dotnet-install.sh"
+	sudo /home/"${local_user}"/dotnet-install.sh --install-dir "${DOTNET_ROOT}" --channel 9.0
 	;;
 sles)
 	sudo wget https://dot.net/v1/dotnet-install.sh -O "/home/${local_user}/dotnet-install.sh"
 	sudo chmod +x "/home/${local_user}/dotnet-install.sh"
-	sudo /home/"${local_user}"/dotnet-install.sh --install-dir "${DOTNET_ROOT}" --channel 8.0
+	sudo /home/"${local_user}"/dotnet-install.sh --install-dir "${DOTNET_ROOT}" --channel 9.0
 	;;
 rhel*)
 	sudo wget https://dot.net/v1/dotnet-install.sh -O "/home/${local_user}/dotnet-install.sh"
 	sudo chmod +x "/home/${local_user}/dotnet-install.sh"
-	sudo /home/"${local_user}"/dotnet-install.sh --install-dir "${DOTNET_ROOT}" --channel 8.0
+	sudo /home/"${local_user}"/dotnet-install.sh --install-dir "${DOTNET_ROOT}" --channel 9.0
 	;;
 esac
 
@@ -586,10 +607,14 @@ if [[ ! -x "${ansible_venv_bin}/pip3" ]]; then
 fi
 
 # Ensure that standard tools are up to date
-sudo "${ansible_venv_bin}"/pip3 install --upgrade \
-	pip \
-	wheel \
-	setuptools
+sudo "${ansible_venv_bin}"/pip3 install --upgrade pip         \
+                                                  wheel       \
+	                                                setuptools
+
+# Install requirements
+if [[ -f "${asad_automation_dir}/deploy/ansible/requirements.txt" ]]; then
+  sudo "${ansible_venv_bin}/pip3" install -r "${asad_automation_dir}/deploy/ansible/requirements.txt"
+fi
 
 # Install latest MicroSoft Authentication Library
 # TODO(rtamalin): Do we need this? In particular do we expect to integrated
@@ -608,12 +633,13 @@ sudo "${ansible_venv_bin}"/pip3 install \
 	argcomplete \
 	'pywinrm>=0.3.0' \
 	netaddr \
-	jmespath
+	jmespath \
+	ansible-lint
 
 # Create symlinks for all relevant commands that were installed in the Ansible
 # venv's bin so that they are available in the /opt/ansible/bin directory, which
 # will be added to the system PATH. This ensures that we expose only those tools
-# that we need from the Ansible venv bin directory without superceding standard
+# that we need from the Ansible venv bin directory without superseding standard
 # system versions of the commands that are also found there, e.g. python3.
 ansible_venv_commands=(
 	# Ansible 2.9 command set
@@ -628,9 +654,7 @@ ansible_venv_commands=(
 	ansible-pull
 	ansible-test
 	ansible-vault
-
-	# ansible-lint
-	# ansible-lint
+	ansible-lint
 
 	# argcomplete
 	activate-global-python-argcomplete
@@ -651,11 +675,14 @@ sudo "${ansible_bin}"/activate-global-python-argcomplete
 sudo mkdir -p "${ansible_collections}"
 set +o xtrace
 
-sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.windows --force --collections-path "${ansible_collections}"
-sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.posix --force --collections-path "${ansible_collections}"
-sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.utils --force --collections-path "${ansible_collections}"
-sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install community.windows --force --collections-path "${ansible_collections}"
-sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install microsoft.ad --force --collections-path "${ansible_collections}"
+echo "Installing ansible.windows..."    ; sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.windows     --force --collections-path "${ansible_collections}"
+echo "Installing ansible.posix..."      ; sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.posix       --force --collections-path "${ansible_collections}"
+echo "Installing ansible.utils..."      ; sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.utils       --force --collections-path "${ansible_collections}"
+echo "Installing community.windows..."  ; sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install community.windows   --force --collections-path "${ansible_collections}"
+echo "Installing microsoft.ad..."       ; sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install microsoft.ad        --force --collections-path "${ansible_collections}"
+echo "Installing azure.azcollection..." ; sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install azure.azcollection  --force --collections-path "${ansible_collections}"
+
+echo "Installing azure.azcollection requirements..." ; sudo -H "${ansible_pip3}" install -r "${ansible_collections}/ansible_collections/azure/azcollection/requirements.txt"
 
 if [[ "${ansible_version}" == "2.11" ]]; then
 	# ansible galaxy upstream has changed. Some collections are only available for install via old-galaxy.ansible.com
@@ -666,7 +693,7 @@ if [[ "${ansible_version}" == "2.11" ]]; then
 	sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.netcommon --force --collections-path "${ansible_collections}" --server="https://old-galaxy.ansible.com" --ignore-certs
 else
 	echo "Installing community.general"
-	sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install community.general --force --collections-path "${ansible_collections}"
+	sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install community.general==11.4.1 --force --collections-path "${ansible_collections}"
 	echo "Installing ansible.netcommon:5.1.2"
 	sudo -H "${ansible_venv_bin}/ansible-galaxy" collection install ansible.netcommon:5.1.2 --force --collections-path "${ansible_collections}"
 fi
@@ -678,15 +705,7 @@ echo '# Configure environment settings for deployer interactive sessions' | sudo
 
 export PATH="${PATH}":"${ansible_bin}":"${tf_bin}":"${DOTNET_ROOT}"
 
-# Prepare Azure SAP Automated Deployment folder structure
-mkdir -p \
-	"${asad_ws}"/LOCAL/"${rg_name}" \
-	"${asad_ws}"/LIBRARY \
-	"${asad_ws}"/SYSTEM \
-	"${asad_ws}"/LANDSCAPE \
-	"${asad_ws}"/DEPLOYER/"${rg_name}"
 
-chown -R "${USER}" "${asad_ws}"
 
 #
 # Update current session
@@ -696,8 +715,10 @@ echo '# Configure environment settings for deployer interactive session'
 # Add new /opt bin directories to start of PATH to ensure the versions we installed
 # are preferred over any installed standard system versions.
 
-export ARM_SUBSCRIPTION_ID="${subscription_id}"
-export DEPLOYMENT_REPO_PATH="$HOME/Azure_SAP_Automated_Deployment/sap-automation"
+ARM_SUBSCRIPTION_ID="$(az account show --query id --output tsv)"
+export ARM_SUBSCRIPTION_ID
+DEPLOYMENT_REPO_PATH="$HOME/Azure_SAP_Automated_Deployment/sap-automation"
+export DEPLOYMENT_REPO_PATH
 
 # Add new /opt bin directories to start of PATH to ensure the versions we installed
 # are preferred over any installed standard system versions.
@@ -706,8 +727,13 @@ export DEPLOYMENT_REPO_PATH="$HOME/Azure_SAP_Automated_Deployment/sap-automation
 export ANSIBLE_HOST_KEY_CHECKING=False
 export ANSIBLE_COLLECTIONS_PATH=~/.ansible/collections:"${ansible_collections}"
 
-# Set env for MSI
-export ARM_USE_MSI=true
+isMSI=$(az account show --query user.assignedIdentityInfo --output tsv)
+if [ -n "$isMSI" ]; then
+	# Set env for MSI
+	ARM_CLIENT_ID=$(echo $isMSI  | cut -d'-' -f2-6)
+	export ARM_USE_MSI=true
+	export ARM_CLIENT_ID
+fi
 
 #
 # Create /etc/profile.d script to setup environment for future interactive sessions
@@ -716,7 +742,7 @@ export PATH="${PATH}":"${ansible_bin}":"${tf_bin}":"${HOME}"/Azure_SAP_Automated
 
 echo "# Configure environment settings for deployer interactive sessions" | tee -a /tmp/deploy_server.sh
 
-echo "export ARM_SUBSCRIPTION_ID=${subscription_id}" | tee -a /tmp/deploy_server.sh
+echo "export ARM_SUBSCRIPTION_ID=$(az account show --query id --output tsv)" | tee -a /tmp/deploy_server.sh
 
 # Replace with your actual agent directory
 AGENT_DIR="/home/${USER}/agent"
@@ -746,31 +772,16 @@ else
 
 	echo export "PATH=${ansible_bin}:${tf_bin}:${PATH}:${HOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/scripts:${HOME}/Azure_SAP_Automated_Deployment/sap-automation/deploy/ansible" | tee -a /tmp/deploy_server.sh
 
-	# Set env for MSI
-	echo "export ARM_USE_MSI=true" | tee -a /tmp/deploy_server.sh
-
-	/usr/bin/az login --identity 2>error.log || :
-	# Ensure that the user's account is logged in to Azure with specified creds
-
-	if [ ! -f error.log ]; then
-		/usr/bin/az account show >az.json
-		client_id=$(jq --raw-output .id az.json)
-		tenant_id=$(jq --raw-output .tenantId az.json)
-		rm az.json
-	else
-		client_id=''
-		tenant_id=''
+	if [ -n "${isMSI}" ]; then
+		# Set env for MSI
+		echo "export ARM_USE_MSI=true" | tee -a /tmp/deploy_server.sh
+		echo "export ARM_CLIENT_ID=${ARM_CLIENT_ID}" | tee -a /tmp/deploy_server.sh
 	fi
 
-	if [ -n "${client_id}" ]; then
-		export ARM_CLIENT_ID=${client_id}
-		echo "export ARM_CLIENT_ID=${client_id}" | tee -a /tmp/deploy_server.sh
-	fi
+	ARM_TENANT_ID=$(/usr/bin/az account show --query tenantId --output tsv)
+	
+	echo "export ARM_TENANT_ID=${ARM_TENANT_ID}" | tee -a /tmp/deploy_server.sh
 
-	# if [ -n "${tenant_id}" ]; then
-	#   export ARM_TENANT_ID=${tenant_id}
-	#   echo "export ARM_TENANT_ID=${tenant_id}" | tee -a /tmp/deploy_server.sh
-	# fi
 fi
 
 # Set env for ansible
@@ -794,12 +805,18 @@ chown -R "${USER}" "${asad_home}"
 # echo "export DOTNET_ROOT=/snap/dotnet-sdk/current" | tee -a /tmp/deploy_server.sh
 
 # Ensure that the user's account is logged in to Azure with specified creds
-echo 'az login --identity --output none' | tee -a /tmp/deploy_server.sh
-# shellcheck disable=SC2016
-echo 'echo ${USER} account ready for use with Azure SAP Automated Deployment' | tee -a /tmp/deploy_server.sh
+if [ -n "${isMSI}" ]; then
+	# shellcheck disable=SC2016
+	echo 'az login --identity --client-id $ARM_CLIENT_ID --tenant $ARM_TENANT_ID --output none' | tee -a /tmp/deploy_server.sh
+	# shellcheck disable=SC2016
+	echo 'echo ${USER} account ready for use with Azure SAP Automated Deployment' | tee -a /tmp/deploy_server.sh
+fi
 
 sudo cp /tmp/deploy_server.sh /etc/profile.d/deploy_server.sh
 sudo rm /tmp/deploy_server.sh
-
-/usr/bin/az login --identity --output none
+if [ -n "${isMSI}" ]; then
+	/usr/bin/az login --identity --client-id $ARM_CLIENT_ID --tenant $ARM_TENANT_ID --output none
+else
+	/usr/bin/az login --identity --output none
+fi
 echo "${USER} account ready for use with Azure SAP Automated Deployment"

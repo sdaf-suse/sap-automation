@@ -340,11 +340,11 @@ else {
 
   $resources_url = $ADO_ORGANIZATION + "/_git/" + [uri]::EscapeDataString($ADO_Project) + "?path=/pipelines/resources.yml"
 
-  $log = ("Please update [resources.yml](" + $resources_url + ") to point to Github instead of Azure DevOps.")
+  $log = ("Please update [resources.yml](" + $resources_url + ") to point to GitHub instead of Azure DevOps.")
 
   $gh_connection_url = $ADO_ORGANIZATION + "/" + [uri]::EscapeDataString($ADO_Project) + "/_settings/adminservices"
   Write-Host ""
-  Write-Host "The browser will now open, please create a new Github connection, record the name of the connection."
+  Write-Host "The browser will now open, please create a new GitHub connection, record the name of the connection."
   Start-Process $gh_connection_url
   Read-Host "Please press enter when you have created the connection"
 
@@ -485,7 +485,7 @@ Write-Host "Creating the variable group SDAF-General" -ForegroundColor Green
 
 $general_group_id = (az pipelines variable-group list --query "[?name=='SDAF-General'].id | [0]" --only-show-errors)
 if ($general_group_id.Length -eq 0) {
-  az pipelines variable-group create --name SDAF-General --variables ANSIBLE_HOST_KEY_CHECKING=false Deployment_Configuration_Path=WORKSPACES Branch=main tf_version="1.11.3" ansible_core_version="2.16" S-Username=$SUserName S-Password=$SPassword --output yaml --authorize true --output none
+  az pipelines variable-group create --name SDAF-General --variables ANSIBLE_HOST_KEY_CHECKING=false Deployment_Configuration_Path=WORKSPACES Branch=main tf_version="1.15.7" ansible_core_version="2.16" S-Username=$SUserName S-Password=$SPassword --output yaml --authorize true --output none
   $general_group_id = (az pipelines variable-group list --query "[?name=='SDAF-General'].id | [0]" --only-show-errors)
   az pipelines variable-group variable update --group-id $general_group_id --name "S-Password" --value $SPassword --secret true --output none --only-show-errors
 
@@ -592,6 +592,25 @@ Add-Content -Path $fname -Value $log
 $bodyText.pipelines += @{
   id         = $pipeline_id
   authorized = $true
+}
+
+$pipeline_name = 'SAP Quality Assurance'
+$pipeline_id = (az pipelines list --query "[?name=='$pipeline_name'].id | [0]")
+if ($pipeline_id.Length -eq 0) {
+  az pipelines create --name $pipeline_name --branch main --description 'Runs the SAP quality assurance tests and configuration checks' --skip-run --yaml-path "/pipelines/13-sap-automation-qa.yml" --repository $repo_id --repository-type tfsgit --output none --only-show-errors
+  $pipeline_id = (az pipelines list --query "[?name=='$pipeline_name'].id | [0]")
+  if ($pipeline_id.Length -eq 0) {
+    Write-Warning "Could not create the '$pipeline_name' pipeline. This definition needs /pipelines/13-sap-automation-qa.yml in the configuration repository. Update the configuration repository and rerun this script to add the pipeline."
+  }
+}
+if ($pipeline_id.Length -gt 0) {
+  $this_pipeline_url = $ADO_ORGANIZATION + "/" + [uri]::EscapeDataString($ADO_Project) + "/_build?definitionId=" + $pipeline_id
+  $log = ("[" + $pipeline_name + "](" + $this_pipeline_url + ")")
+  Add-Content -Path $fname -Value $log
+  $bodyText.pipelines += @{
+    id         = $pipeline_id
+    authorized = $true
+  }
 }
 
 $pipeline_name = 'Remove System or Workload Zone'
@@ -783,7 +802,7 @@ az role assignment create --assignee $CP_ARM_CLIENT_ID --role "User Access Admin
 $Control_plane_groupID = (az pipelines variable-group list --query "[?name=='$ControlPlanePrefix'].id | [0]" --only-show-errors)
 if ($Control_plane_groupID.Length -eq 0) {
   Write-Host "Creating the variable group" $ControlPlanePrefix -ForegroundColor Green
-  az pipelines variable-group create --name $ControlPlanePrefix --variables Agent='Azure Pipelines' APP_REGISTRATION_APP_ID=$APP_REGISTRATION_ID CP_ARM_CLIENT_ID=$CP_ARM_CLIENT_ID CP_ARM_OBJECT_ID=$CP_ARM_OBJECT_ID CP_ARM_CLIENT_SECRET='Enter your SPN password here' CP_ARM_SUBSCRIPTION_ID=$Control_plane_subscriptionID CP_ARM_TENANT_ID=$CP_ARM_TENANT_ID WEB_APP_CLIENT_SECRET=$WEB_APP_CLIENT_SECRET PAT='Enter your personal access token here' POOL=$Pool_Name AZURE_CONNECTION_NAME='Control_Plane_Service_Connection' WORKLOADZONE_PIPELINE_ID=$wz_pipeline_id SYSTEM_PIPELINE_ID=$system_pipeline_id SDAF_GENERAL_GROUP_ID=$general_group_id SAP_INSTALL_PIPELINE_ID=$installation_pipeline_id TF_LOG=OFF --output none --authorize true
+  az pipelines variable-group create --name $ControlPlanePrefix --variables AGENT='Azure Pipelines' APP_REGISTRATION_APP_ID=$APP_REGISTRATION_ID CP_ARM_CLIENT_ID=$CP_ARM_CLIENT_ID CP_ARM_OBJECT_ID=$CP_ARM_OBJECT_ID CP_ARM_CLIENT_SECRET='Enter your SPN password here' CP_ARM_SUBSCRIPTION_ID=$Control_plane_subscriptionID CP_ARM_TENANT_ID=$CP_ARM_TENANT_ID WEB_APP_CLIENT_SECRET=$WEB_APP_CLIENT_SECRET PAT='Enter your personal access token here' POOL=$Pool_Name AZURE_CONNECTION_NAME='Control_Plane_Service_Connection' WORKLOADZONE_PIPELINE_ID=$wz_pipeline_id SYSTEM_PIPELINE_ID=$system_pipeline_id SDAF_GENERAL_GROUP_ID=$general_group_id SAP_INSTALL_PIPELINE_ID=$installation_pipeline_id TF_LOG=OFF --output none --authorize true
   $Control_plane_groupID = (az pipelines variable-group list --query "[?name=='$ControlPlanePrefix'].id | [0]" --only-show-errors)
 }
 
@@ -876,7 +895,7 @@ $Service_Connection_Name = $Workload_zone_code + "_WorkloadZone_Service_Connecti
 $GroupID = (az pipelines variable-group list --query "[?name=='$WorkloadZonePrefix'].id | [0]" --only-show-errors )
 if ($GroupID.Length -eq 0) {
   Write-Host "Creating the variable group" $WorkloadZonePrefix -ForegroundColor Green
-  az pipelines variable-group create --name $WorkloadZonePrefix --variables Agent='Azure Pipelines' ARM_CLIENT_ID=$ARM_CLIENT_ID ARM_OBJECT_ID=$ARM_OBJECT_ID ARM_CLIENT_SECRET=$ARM_CLIENT_SECRET ARM_SUBSCRIPTION_ID=$Workload_zone_subscriptionID ARM_TENANT_ID=$ARM_TENANT_ID WZ_PAT='Enter your personal access token here' POOL=$Pool_Name AZURE_CONNECTION_NAME=$Service_Connection_Name TF_LOG=OFF --output none --authorize true
+  az pipelines variable-group create --name $WorkloadZonePrefix --variables AGENT='Azure Pipelines' ARM_CLIENT_ID=$ARM_CLIENT_ID ARM_OBJECT_ID=$ARM_OBJECT_ID ARM_CLIENT_SECRET=$ARM_CLIENT_SECRET ARM_SUBSCRIPTION_ID=$Workload_zone_subscriptionID ARM_TENANT_ID=$ARM_TENANT_ID WZ_PAT='Enter your personal access token here' POOL=$Pool_Name AZURE_CONNECTION_NAME=$Service_Connection_Name TF_LOG=OFF --output none --authorize true
   $GroupID = (az pipelines variable-group list --query "[?name=='$WorkloadZonePrefix'].id | [0]" --only-show-errors)
 }
 

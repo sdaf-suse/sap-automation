@@ -22,6 +22,9 @@
 .PARAMETER WorkloadZoneCode
     The workload zone code identifier (e.g., MGMT).
 
+.PARAMETER WorkloadZoneName
+    The workload zone name (e.g., QA-WEEU-SAP01).
+
 .PARAMETER AuthenticationMethod
     The authentication method to use (Service Principal or Managed Identity).
 
@@ -48,9 +51,10 @@ function Remove-SDAFADOWorkloadZone {
     [string]$AdoProject,
 
     [Parameter(Mandatory = $true, HelpMessage = "Workload zone code (e.g., DEV)")]
-    [ValidateLength(2, 8)]
-    [ValidatePattern('^[A-Z0-9]+$')]
     [string]$WorkloadZoneCode,
+
+    [Parameter(Mandatory = $false, HelpMessage = "Workload zone name (e.g., DEV-WEEU-SAP01)")]
+    [string]$WorkloadZoneName = "",
 
     [Parameter(Mandatory = $true, HelpMessage = "Authentication method to use")]
     [ValidateSet("Service Principal", "Managed Identity")]
@@ -116,7 +120,7 @@ function Remove-SDAFADOWorkloadZone {
       Write-Verbose "Initializing variables from parameters"
       $ArmTenantId = $TenantId
       $WorkloadZoneSubscriptionIdInternal = $WorkloadZoneSubscriptionId
-      $VersionLabel = "v3.15.0.0"
+      $VersionLabel = "v3.23.0.0"
       Write-Verbose "Version label set to: $VersionLabel"
 
       # Set path separator based on OS
@@ -195,11 +199,16 @@ function Remove-SDAFADOWorkloadZone {
       #endregion
 
       #region Set up prefixes
-      $WorkloadZonePrefix = "SDAF-" + $WorkloadZoneCode
+      if ($WorkloadZoneName.Length -ne 0) {
+        $WorkloadZonePrefix = "SDAF-" + $WorkloadZoneName
+      }
+      else {
+        $WorkloadZonePrefix = "SDAF-" + $WorkloadZoneCode
+      }
+      Write-Host "Workload zone prefix: $WorkloadZonePrefix"
       Write-Verbose "Workload zone prefix: $WorkloadZonePrefix"
 
       #endregion
-
 
       $ProjectId = (az devops project list --organization $AdoOrganization --query "[value[]] | [0] | [? name=='$AdoProject'].id | [0]" --out tsv)
 
@@ -210,10 +219,42 @@ function Remove-SDAFADOWorkloadZone {
 
       $ServiceConnectionName = $WorkloadZoneCode + "_WorkloadZone_Service_Connection"
 
-      $ServiceConnectionId = (az devops service-endpoint list --query "[?name=='$ConnectionName'].id | [0]" --project $ProjectId --out tsv)
+      $ServiceConnectionId = (az devops service-endpoint list --query "[?name=='$ServiceConnectionName'].id | [0]" --organization $AdoOrganization --project $ProjectId --out tsv)
       if ($ServiceConnectionId.Length -gt 0) {
         Write-Host "Service Connection" $ServiceConnectionName "exists, removing it." -ForegroundColor Yellow
-        az devops service-endpoint delete --id $ServiceConnectionId --only-show-errors
+
+        $federatedIdentityName = $ServiceConnectionName
+
+        $FoundFederatedIdentity = (az ad app list --all --filter "startswith(displayName, '$federatedIdentityName')" --query  "[?displayName=='$federatedIdentityName'].id | [0]" --only-show-errors)
+        if ($FoundFederatedIdentity.Length -ne 0) {
+          $confirmation = Read-Host "Remove App registration ($federatedIdentityName) y/n?"
+          if ($confirmation -eq 'y') {
+            Write-Host "Removing the App Registration : $federatedIdentityName" -ForegroundColor Green
+            az ad app delete --id $FoundFederatedIdentity
+
+            $uri = "https://graph.microsoft.com/v1.0/directory/deletedItems/microsoft.graph.application?`$filter=displayName eq '$federatedIdentityName'&`$select=id,appId,displayName,deletedDateTime"
+            $deleted = az rest --method GET --url $uri | ConvertFrom-Json
+            if (-not $deleted.value -or $deleted.value.Count -eq 0) {
+              Write-Host "No deleted app found to purge." -ForegroundColor DarkYellow
+            }
+            else {
+              foreach ($d in $deleted.value) {
+                Write-Host "Purging deleted app: $($d.displayName) | appId=$($d.appId) | deletedObjectId=$($d.id)" -ForegroundColor Red
+                az rest --method DELETE --url "https://graph.microsoft.com/v1.0/directory/deletedItems/$($d.id)" | Out-Null
+              }
+
+            }
+
+            Write-Host "Purge complete." -ForegroundColor Green
+            $deletedAppId = $deleted.value[0].id
+            Write-Host "Purging deleted app with id: $deletedAppId" -ForegroundColor Green
+            az ad app delete --id $deletedAppId --only-show-errors
+          }
+        }
+        else {
+          Write-Host "Skipping removal of App registration" $federatedIdentityName -ForegroundColor Yellow
+        }        az devops service-endpoint delete --id $ServiceConnectionId --only-show-errors
+
       }
       else {
         Write-Host "Service Connection" $ServiceConnectionName "not found, skipping removal."

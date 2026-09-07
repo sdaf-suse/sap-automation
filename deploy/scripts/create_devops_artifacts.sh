@@ -123,6 +123,19 @@ if [ -z $installation_pipeline_id ] ; then
   installation_pipeline_id=$(az pipelines create --name 'Configuration and SAP installation' --branch main --description 'Configures the Operating System and installs the SAP application' --org  $ADO_ORGANIZATION --project $id --skip-run --yaml-path /pipelines/05-DB-and-SAP-installation.yml --repository $repo_id --repository-type tfsgit --output none)
 fi
 
+pipeline_name='SAP Quality Assurance'
+pipeline_id=$(az pipelines list --org "${ADO_ORGANIZATION}" --project "${ADO_PROJECT}" --query "[?name=='${pipeline_name}'].id | [0]" | tr -d \")
+if [ -z $pipeline_id ] ; then
+  # The wrapper this definition points at ships with the configuration
+  # repository. Provisioning must not abort when that repository predates it,
+  # so the definition is created on a best-effort basis and reported instead.
+  if ! az pipelines create --name 'SAP Quality Assurance' --branch main --description 'Runs the SAP quality assurance tests and configuration checks' --org  $ADO_ORGANIZATION --project $id --skip-run --yaml-path /pipelines/13-sap-automation-qa.yml --repository $repo_id --repository-type tfsgit --output none ; then
+    echo -e "${bold_red}Could not create the 'SAP Quality Assurance' pipeline.${reset_formatting}"
+    echo "This definition needs /pipelines/13-sap-automation-qa.yml in the configuration repository."
+    echo "Update the configuration repository and rerun this script to add the pipeline."
+  fi
+fi
+
 pipeline_name='Remove deployments'
 pipeline_id=$(az pipelines list --org "${ADO_ORGANIZATION}" --project "${ADO_PROJECT}" --query "[?name=='${pipeline_name}'].id | [0]" | tr -d \")
 if [ -z $pipeline_id ] ; then
@@ -169,10 +182,10 @@ fi
 
 GroupID=$(az pipelines variable-group list --project "${ADO_PROJECT}" --organization "${ADO_ORGANIZATION}" --query "[?name=='SDAF-$SDAF_CONTROL_PLANE_CODE'].id | [0]" --only-show-errors)
 if [ -z $GroupID ] ; then
-  az pipelines variable-group create --name SDAF-$SDAF_CONTROL_PLANE_CODE --variables Agent='Azure Pipelines' APP_REGISTRATION_APP_ID='Enter your app registration ID here' CP_ARM_CLIENT_ID='Enter your SPN ID here' CP_ARM_OBJECT_ID='Enter your SPN Object ID here' CP_ARM_CLIENT_SECRET='Enter your SPN password here' CP_ARM_SUBSCRIPTION_ID='Enter your control plane subscription here' CP_ARM_TENANT_ID='Enter SPNs Tenant ID here' WEB_APP_CLIENT_SECRET='Enter your App registration secret here' PAT='Enter your personal access token here' POOL=MGMT-POOL AZURE_CONNECTION_NAME=Control_Plane_Service_Connection WORKLOADZONE_PIPELINE_ID=${wz_pipeline_id} SYSTEM_PIPELINE_ID=${system_pipeline_id} SDAF_GENERAL_GROUP_ID=${general_group_id} SAP_INSTALL_PIPELINE_ID=${installation_pipeline_id} --output yaml --org  $ADO_ORGANIZATION --project $id --authorize true --output none
+  az pipelines variable-group create --name SDAF-$SDAF_CONTROL_PLANE_CODE --variables AGENT='Azure Pipelines' APP_REGISTRATION_APP_ID='Enter your app registration ID here' CP_ARM_CLIENT_ID='Enter your SPN ID here' CP_ARM_OBJECT_ID='Enter your SPN Object ID here' CP_ARM_CLIENT_SECRET='Enter your SPN password here' CP_ARM_SUBSCRIPTION_ID='Enter your control plane subscription here' CP_ARM_TENANT_ID='Enter SPNs Tenant ID here' WEB_APP_CLIENT_SECRET='Enter your App registration secret here' PAT='Enter your personal access token here' POOL=MGMT-POOL AZURE_CONNECTION_NAME=Control_Plane_Service_Connection WORKLOADZONE_PIPELINE_ID=${wz_pipeline_id} SYSTEM_PIPELINE_ID=${system_pipeline_id} SDAF_GENERAL_GROUP_ID=${general_group_id} SAP_INSTALL_PIPELINE_ID=${installation_pipeline_id} --output yaml --org  $ADO_ORGANIZATION --project $id --authorize true --output none
 fi
 
 GroupID=$(az pipelines variable-group list --project "${ADO_PROJECT}" --organization "${ADO_ORGANIZATION}" --query "[?name=='SDAF-$SDAF_WORKLOAD_ZONE_CODE'].id | [0]" --only-show-errors )
 if [ -z $GroupID ] ; then
-  az pipelines variable-group create --name SDAF-$SDAF_WORKLOAD_ZONE_CODE --variables Agent='Azure Pipelines' ARM_CLIENT_ID='Enter your SPN ID here' ARM_OBJECT_ID='Enter your SPN Object ID here' ARM_CLIENT_SECRET='Enter your SPN password here' ARM_SUBSCRIPTION_ID='Enter your target subscription here' ARM_TENANT_ID='Enter SPNs Tenant ID here' PAT='Enter your personal access token here' POOL=MGMT-POOL AZURE_CONNECTION_NAME=DEV_Service_Connection --output yaml --org  $ADO_ORGANIZATION --project $id --authorize true --output none
+  az pipelines variable-group create --name SDAF-$SDAF_WORKLOAD_ZONE_CODE --variables AGENT='Azure Pipelines' ARM_CLIENT_ID='Enter your SPN ID here' ARM_OBJECT_ID='Enter your SPN Object ID here' ARM_CLIENT_SECRET='Enter your SPN password here' ARM_SUBSCRIPTION_ID='Enter your target subscription here' ARM_TENANT_ID='Enter SPNs Tenant ID here' PAT='Enter your personal access token here' POOL=MGMT-POOL AZURE_CONNECTION_NAME=DEV_Service_Connection --output yaml --org  $ADO_ORGANIZATION --project $id --authorize true --output none
 fi

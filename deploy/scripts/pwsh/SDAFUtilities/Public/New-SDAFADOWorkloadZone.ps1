@@ -25,8 +25,17 @@
 .PARAMETER ControlPlaneCode
     The control plane code identifier (e.g., MGMT).
 
+.PARAMETER ControlPlaneName
+    The control plane name (e.g., "MGMT-WEEU-DEP01").
+
+.PARAMETER ControlPlaneSubscriptionId
+    The subscription ID for the control plane resources.
+
 .PARAMETER WorkloadZoneCode
-    The workload zone code identifier (e.g., MGMT).
+    The workload zone code identifier (e.g., QA).
+
+.PARAMETER WorkloadZoneName
+    The workload zone name (e.g., "QA-WEEU-SAP01").
 
 .PARAMETER WorkloadZoneSubscriptionId
     The subscription ID for the workload zone resources.
@@ -36,6 +45,9 @@
 
 .PARAMETER ManagedIdentityObjectId
     The object ID of the managed identity (required for Managed Identity authentication).
+
+.PARAMETER ManagedIdentityId
+    The ID of the managed identity (required for Managed Identity authentication).
 
 .PARAMETER CreateConnections
     Switch to create service connections automatically.
@@ -70,14 +82,20 @@ function New-SDAFADOWorkloadZone {
     [string]$TenantId,
 
     [Parameter(Mandatory = $true, HelpMessage = "Control Plane code (e.g., MGMT)")]
-    [ValidateLength(2, 8)]
-    [ValidatePattern('^[A-Z0-9]+$')]
     [string]$ControlPlaneCode,
 
+    [Parameter(Mandatory = $false, HelpMessage = "Control Plane name (e.g., MGMT-WEEU-DEP01)")]
+    [string]$ControlPlaneName = "",
+
+    [Parameter(Mandatory = $true, HelpMessage = "Control Plane subscription ID")]
+    [ValidateScript({ [System.Guid]::TryParse($_, [ref][System.Guid]::Empty) })]
+    [string]$ControlPlaneSubscriptionId,
+
     [Parameter(Mandatory = $true, HelpMessage = "Workload zone code (e.g., DEV)")]
-    [ValidateLength(2, 8)]
-    [ValidatePattern('^[A-Z0-9]+$')]
     [string]$WorkloadZoneCode,
+
+    [Parameter(Mandatory = $false, HelpMessage = "Workload zone name (e.g., DEV-WEEU-SAP01)")]
+    [string]$WorkloadZoneName = "",
 
     [Parameter(Mandatory = $true, HelpMessage = "Workload zone subscription ID")]
     [ValidateScript({ [System.Guid]::TryParse($_, [ref][System.Guid]::Empty) })]
@@ -99,6 +117,10 @@ function New-SDAFADOWorkloadZone {
     [ValidateScript({ [System.Guid]::TryParse($_, [ref][System.Guid]::Empty) })]
     [string]$ManagedIdentityObjectId,
 
+    # Managed Identity specific parameters
+    [Parameter(ParameterSetName = "ManagedIdentity", Mandatory = $false)]
+    [string]$ManagedIdentityId,
+
     # Switch parameters
     [Parameter(HelpMessage = "Create service connections automatically")]
     [switch]$CreateConnections,
@@ -115,6 +137,7 @@ function New-SDAFADOWorkloadZone {
     Write-Verbose "  TenantId: $TenantId"
     Write-Verbose "  AuthenticationMethod: $AuthenticationMethod"
     Write-Verbose "  ManagedIdentityObjectId: $ManagedIdentityObjectId"
+    Write-Verbose "  ManagedIdentityId: $ManagedIdentityId"
     Write-Verbose "  WorkloadZoneCode: $WorkloadZoneCode"
     Write-Verbose "  WorkloadZoneSubscriptionId: $WorkloadZoneSubscriptionId"
     Write-Verbose "  CreateConnections: $CreateConnections"
@@ -127,10 +150,11 @@ function New-SDAFADOWorkloadZone {
 
     $Roles = @(
       "Contributor",
-      "Role Based Access Control Administrator",
       "Storage Blob Data Owner",
       "Key Vault Administrator",
-      "App Configuration Data Owner"
+      "Key Vault Secrets Officer",
+      "App Configuration Data Owner",
+      "Network Contributor"
     )
 
     # Helper function for menu display
@@ -163,13 +187,14 @@ function New-SDAFADOWorkloadZone {
       }
       $JsonInputFile = "sdafMI.json"
 
+      $AppRegistrationId = (az ad sp create-for-rbac --name $ConnectionName  --query "appId" --create-password false --output tsv --service-management-reference $ServiceManagementReference --role contributor --scopes /subscriptions/$SubscriptionId  --only-show-errors)
+      $AppRegistrationId = (az ad sp create-for-rbac --name $ConnectionName  --query "appId" --create-password false --output tsv --service-management-reference $ServiceManagementReference --role "User Access Administrator" --scopes /subscriptions/$SubscriptionId  --only-show-errors)
+
       $PostBody = [PSCustomObject]@{
         authorization                    = [PSCustomObject]@{
           parameters = [PSCustomObject]@{
-            tenantid                             = $TenantId
-            workloadIdentityFederationIssuerType = "EntraID"
-            serviceprincipalid                   = $ManagedIdentityClientId
-            scope                                = "/subscriptions/" + $SubscriptionId
+            tenantid           = $TenantId
+            serviceprincipalid = $AppRegistrationId
           }
           scheme     = "WorkloadIdentityFederation"
         }
@@ -178,8 +203,7 @@ function New-SDAFADOWorkloadZone {
           scopeLevel       = "Subscription"
           subscriptionId   = $SubscriptionId
           subscriptionName = (az account show --query name -o tsv)
-          creationMode     = "Automatic"
-          identityType     = "ManagedIdentity"
+          creationMode     = "Manual"
         }
         name                             = $ConnectionName
         owner                            = "library"
@@ -194,13 +218,29 @@ function New-SDAFADOWorkloadZone {
             name = $ProjectName
           }
         }
-
       }
       Set-Content -Path $JsonInputFile -Value ($PostBody | ConvertTo-Json -Depth 6)
 
       Write-Verbose "Creating service connection: $ConnectionName"
-      az devops service-endpoint create --service-endpoint-configuration $JsonInputFile --organization $AdoOrganization --project $AdoProject --output none --only-show-errors
+
+      $Fed = (az devops service-endpoint create --service-endpoint-configuration $JsonInputFile --organization $AdoOrganization --project $AdoProject --query authorization.parameters --only-show-errors | ConvertFrom-Json)
+      if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to create service connection '$ConnectionName'"
+        throw "Service connection creation failed"
+      }
       Write-Host "Service connection '$ConnectionName' created successfully." -ForegroundColor Green
+
+      $PostBody = [PSCustomObject]@{
+        name      = "fic-for-sc"
+        issuer    = $Fed.workloadIdentityFederationIssuer
+        subject   = $Fed.workloadIdentityFederationSubject
+        audiences = @("api://AzureADTokenExchange")
+      }
+
+      Set-Content -Path $JsonInputFile -Value ($PostBody | ConvertTo-Json -Depth 6)
+      az ad app federated-credential create --id $AppRegistrationId --parameters $JsonInputFile
+
+      az ad app show --id $AppRegistrationId --query '{appId:appId,principalId:id,Name:displayName}'
 
       if (Test-Path $JsonInputFile) {
         Remove-Item $JsonInputFile
@@ -241,7 +281,7 @@ function New-SDAFADOWorkloadZone {
       Write-Verbose "Initializing variables from parameters"
       $ArmTenantId = $TenantId
       $WorkloadZoneSubscriptionIdInternal = $WorkloadZoneSubscriptionId
-      $VersionLabel = "v3.15.0.0"
+      $VersionLabel = "v3.23.0.0"
       Write-Verbose "Version label set to: $VersionLabel"
 
       # Set path separator based on OS
@@ -348,9 +388,22 @@ function New-SDAFADOWorkloadZone {
       #endregion
 
       #region Set up prefixes
-      $WorkloadZonePrefix = "SDAF-" + $WorkloadZoneCode
+
+      if ($WorkloadZoneName.Length -ne 0) {
+        $WorkloadZonePrefix = "SDAF-" + $WorkloadZoneName
+      }
+      else {
+        $WorkloadZonePrefix = "SDAF-" + $WorkloadZoneCode
+      }
       Write-Verbose "Workload zone prefix: $WorkloadZonePrefix"
-      $ControlPlanePrefix = "SDAF-" + $ControlPlaneCode
+
+      if ($ControlPlaneName.Length -eq 0) {
+        $ControlPlanePrefix = "SDAF-" + $ControlPlaneCode
+      }
+      else {
+        $ControlPlanePrefix = "SDAF-" + $ControlPlaneName
+      }
+
       Write-Verbose "Control plane prefix: $ControlPlanePrefix"
 
       #endregion
@@ -362,11 +415,12 @@ function New-SDAFADOWorkloadZone {
         throw "Project not found"
       }
 
-      $ManagedIdentityClientId = (az ad sp show --id $ManagedIdentityObjectId --query appId --output tsv)
+      Write-Verbose "Setting Azure DevOps defaults: organization=$AdoOrganization project=$AdoProject"
+      az devops configure --defaults organization=$AdoOrganization project="$AdoProject"
 
       $ControlPlaneVariableGroupId = (az pipelines variable-group list --query "[?name=='$ControlPlanePrefix'].id | [0]" --only-show-errors)
       $AgentPoolName = ""
-      if ($ControlPlaneVariableGroupId.Length -eq 0) {
+      if ($ControlPlaneVariableGroupId.Length -ne 0) {
         $AgentPoolName = (az pipelines variable-group variable list --group-id $ControlPlaneVariableGroupId --query "POOL.value" --out tsv)
       }
 
@@ -374,37 +428,57 @@ function New-SDAFADOWorkloadZone {
       $WorkloadZoneVariableGroupId = (az pipelines variable-group list --query "[?name=='$WorkloadZonePrefix'].id | [0]" --only-show-errors)
       if ($WorkloadZoneVariableGroupId.Length -eq 0) {
         Write-Host "Creating the variable group" $WorkloadZonePrefix -ForegroundColor Green
-        $WorkloadZoneVariableGroupId = (az pipelines variable-group create --name $WorkloadZonePrefix --variables Agent='Azure Pipelines' POOL=$AgentPoolName ARM_TENANT_ID=$ArmTenantId ARM_SUBSCRIPTION_ID=$WorkloadZoneSubscriptionId AZURE_CONNECTION_NAME=$ServiceConnectionName TF_LOG=OFF --query id --output tsv --authorize true)
+        $WorkloadZoneVariableGroupId = (az pipelines variable-group create --name $WorkloadZonePrefix --variables AGENT='Azure Pipelines' POOL=$AgentPoolName ARM_TENANT_ID=$ArmTenantId ARM_SUBSCRIPTION_ID=$WorkloadZoneSubscriptionId AZURE_CONNECTION_NAME=$ServiceConnectionName TF_LOG=OFF --query id --output tsv --authorize true)
       }
 
       if ($AuthenticationMethod -eq "Managed Identity") {
+        $Roles = @(
+          "Contributor",
+          "Storage Blob Data Owner",
+          "Key Vault Administrator",
+          "Key Vault Secrets Officer",
+          "App Configuration Data Owner",
+          "Network Contributor"
+        )
 
-        if ($ManagedIdentityObjectId.Length -eQ 0) {
+        if ($ManagedIdentityId.Length -ne 0) {
+          $ResourceGroupName = $ManagedIdentityId.Split("/")[4]
+          $ManagedIdentityClientId = $(az identity list --query "[?principalId=='$ManagedIdentityObjectId'].clientId" --subscription $ControlPlaneSubscriptionId --resource-group $ResourceGroupName --output tsv)
+          Write-Verbose "Client ID of the Managed Identity: $ManagedIdentityClientId"
+          if ($ManagedIdentityClientId.Length -eq 0) {
+            Write-Error "Managed Identity with Object ID $ManagedIdentityObjectId was not found in subscription $ControlPlaneSubscriptionId"
+            throw "Managed Identity not found"
+          }
 
-          $Title = "Choose the subscription that contains the Managed Identity"
-          $subscriptions = $(az account list --query "[].{Name:name}" -o table | Sort-Object)
-          Show-Menu($subscriptions[2..($subscriptions.Length - 1)])
-          $selection = Read-Host $Title
-
-          $selectionOffset = [convert]::ToInt32($selection, 10) + 1
-
-          $subscription = $subscriptions[$selectionOffset]
-          Write-Host "Using subscription:" $subscription
-
-          $Title = "Choose the Managed Identity"
-          $identities = $(az identity list --query "[].{Name:name}" --subscription $subscription --output table | Sort-Object)
-          Show-Menu($identities[2..($identities.Length - 1)])
-          $selection = Read-Host $Title
-          $selectionOffset = [convert]::ToInt32($selection, 10) + 1
-
-          $identity = $identities[$selectionOffset]
-          Write-Host "Using Managed Identity:" $identity
-
-          $id = $(az identity list --query "[?name=='$identity'].id" --subscription $subscription --output tsv)
-          $ManagedIdentityObjectId = $(az identity show --ids $id --query "principalId" --output tsv)
         }
 
-        $ServiceEndpointExists = (az devops service-endpoint list --query "[?name=='$ServiceConnectionName'].name | [0]" )
+        foreach ($RoleName in $Roles) {
+
+          Write-Host "Assigning role $RoleName to the Managed Identity" -ForegroundColor Green
+          Write-Verbose "Assigning role $RoleName to the Managed Identity ($ManagedIdentityObjectId)"
+          $roleAssignment = az role assignment create --assignee-object-id $ManagedIdentityObjectId --role $RoleName --scope /subscriptions/$WorkloadZoneSubscriptionId --query id --output tsv --only-show-errors
+          if ($roleAssignment) {
+            Write-Host "Successfully assigned $RoleName role to identity" -ForegroundColor Green
+            Write-Verbose "Role assignment ID: $roleAssignment"
+          }
+          else {
+            Write-Warning "Identity created but role assignment may have failed"
+          }
+        }
+
+        $RoleName = "User Access Administrator"
+        $Condition = "( ( !(ActionMatches{'Microsoft.Authorization/roleAssignments/write'}) ) OR  (  @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAllValues:GuidNotEquals {8e3af657-a8ff-443c-a75c-2fe8c4bcb635, 18d7d88d-d35e-4fb5-a5c3-7773c20a72d9} )) AND ( (  !(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'}) ) OR  (  @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAllValues:GuidNotEquals {8e3af657-a8ff-443c-a75c-2fe8c4bcb635, 18d7d88d-d35e-4fb5-a5c3-7773c20a72d9} ))"
+
+        $roleAssignment = az role assignment create --assignee-object-id $ManagedIdentityObjectId --assignee-principal-type ServicePrincipal --role $RoleName --scope /subscriptions/$WorkloadZoneSubscriptionId --query id --condition-version "2.0" --condition $Condition --output tsv --only-show-errors
+        if ($roleAssignment) {
+          Write-Host "Successfully assigned $RoleName role with condition to identity" -ForegroundColor Green
+          Write-Verbose "Role assignment ID: $roleAssignment"
+        }
+        else {
+          Write-Warning "Identity created but conditional role assignment may have failed"
+        }
+
+        $ServiceEndpointExists = (az devops service-endpoint list --query "[?name=='$ServiceConnectionName'].name | [0]"  --out tsv)
         if ($ServiceEndpointExists.Length -eq 0) {
           CreateServiceConnection -ConnectionName $ServiceConnectionName `
             -ServiceConnectionDescription "$WorkloadZoneCode Service Connection" `
@@ -417,10 +491,11 @@ function New-SDAFADOWorkloadZone {
           if ($ServiceEndpointId.Length -ne 0) {
             az devops service-endpoint update --id $ServiceEndpointId --enable-for-all true --output none --only-show-errors
           }
-
           SetVariableGroupVariable -VariableGroupId $WorkloadZoneVariableGroupId -VariableName "ARM_OBJECT_ID" -VariableValue $ManagedIdentityObjectId
+          SetVariableGroupVariable -VariableGroupId $WorkloadZoneVariableGroupId -VariableName "ARM_CLIENT_ID" -VariableValue $ManagedIdentityClientId
           SetVariableGroupVariable -VariableGroupId $WorkloadZoneVariableGroupId -VariableName "USE_MSI" -VariableValue "true"
-          SetVariableGroupVariable -VariableGroupId $ControlPlaneVariableGroupId -VariableName "ARM_CLIENT_ID" -VariableValue $ManagedIdentityClientId
+          SetVariableGroupVariable -VariableGroupId $WorkloadZoneVariableGroupId -VariableName "ARM_USE_MSI" -VariableValue "true"
+
 
         }
         else {
@@ -483,10 +558,23 @@ function New-SDAFADOWorkloadZone {
           Write-Host "Assigning role" $RoleName "to the workload zone Service Principal" -ForegroundColor Green
           az role assignment create --assignee $WorkloadZoneClientId --role $RoleName --scope /subscriptions/$WorkloadZoneSubscriptionId --output none --only-show-errors
         }
+        $RoleName = "User Access Administrator"
+        $Condition = "( ( !(ActionMatches{'Microsoft.Authorization/roleAssignments/write'}) ) OR  (  @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAllValues:GuidNotEquals {8e3af657-a8ff-443c-a75c-2fe8c4bcb635, 18d7d88d-d35e-4fb5-a5c3-7773c20a72d9} )) AND ( (  !(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'}) ) OR  (  @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAllValues:GuidNotEquals {8e3af657-a8ff-443c-a75c-2fe8c4bcb635, 18d7d88d-d35e-4fb5-a5c3-7773c20a72d9} ))"
+
+        $roleAssignment = az role assignment create --assignee-object-id $identity.principalId --assignee-principal-type ServicePrincipal --role $RoleName --scope /subscriptions/$SubscriptionId --query id --condition-version "2.0" --condition $Condition --output tsv --only-show-errors
+        if ($roleAssignment) {
+          Write-Host "Successfully assigned $RoleName role with condition to identity" -ForegroundColor Green
+          Write-Verbose "Role assignment ID: $roleAssignment"
+        }
+        else {
+          Write-Warning "Identity created but conditional role assignment may have failed"
+        }
 
         SetVariableGroupVariable -VariableGroupId $WorkloadZoneVariableGroupId -VariableName "ARM_CLIENT_ID" -VariableValue $WorkloadZoneClientClientId
         SetVariableGroupVariable -VariableGroupId $WorkloadZoneVariableGroupId -VariableName "ARM_CLIENT_SECRET" -VariableValue $WorkloadZoneClientSecret -IsSecret
         SetVariableGroupVariable -VariableGroupId $WorkloadZoneVariableGroupId -VariableName "ARM_OBJECT_ID" -VariableValue $WorkloadZoneClientObjectId
+        SetVariableGroupVariable -VariableGroupId $WorkloadZoneVariableGroupId -VariableName "USE_MSI" -VariableValue "false"
+        SetVariableGroupVariable -VariableGroupId $WorkloadZoneVariableGroupId -VariableName "ARM_USE_MSI" -VariableValue "false"
 
         Write-Host "Create the Service Endpoint in Azure for the workload zone" -ForegroundColor Green
 
@@ -497,16 +585,38 @@ function New-SDAFADOWorkloadZone {
         if ($ServiceConnectionExists.Length -eq 0) {
           Write-Host "Creating Service Endpoint" $ServiceConnectionName -ForegroundColor Green
           az devops service-endpoint azurerm create --azure-rm-service-principal-id $WorkloadZoneClientId --azure-rm-subscription-id $WorkloadZoneSubscriptionId --azure-rm-subscription-name $WorkloadZoneSubscriptionName --azure-rm-tenant-id $WorkloadZoneTenantId --name $ServiceConnectionName --output none --only-show-errors
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to create service connection '$ServiceConnectionName'"
+            throw "Service connection creation failed"
+          }
+          Write-Host "Service connection '$ServiceConnectionName' created successfully." -ForegroundColor Green
           $ServiceConnectionId = az devops service-endpoint list --query "[?name=='$ServiceConnectionName'].id" -o tsv
           az devops service-endpoint update --id $ServiceConnectionId --enable-for-all true --output none --only-show-errors
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to enable service connection '$ServiceConnectionName' for all pipelines"
+            throw "Service connection update failed"
+          }
         }
         else {
           Write-Host "Service Endpoint already exists, recreating it with the updated credentials" -ForegroundColor Green
           $ServiceConnectionId = az devops service-endpoint list --query "[?name=='$ServiceConnectionName'].id" -o tsv
           az devops service-endpoint delete --id $ServiceConnectionId --yes
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to delete existing service connection '$ServiceConnectionName'"
+            throw "Service connection deletion failed"
+          }
           az devops service-endpoint azurerm create --azure-rm-service-principal-id $WorkloadZoneClientId --azure-rm-subscription-id $WorkloadZoneSubscriptionId --azure-rm-subscription-name $WorkloadZoneSubscriptionName --azure-rm-tenant-id $WorkloadZoneTenantId --name $ServiceConnectionName --output none --only-show-errors
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to recreate service connection '$ServiceConnectionName'"
+            throw "Service connection creation failed"
+          }
+          Write-Host "Service connection '$ServiceConnectionName' recreated successfully." -ForegroundColor Green
           $ServiceConnectionId = az devops service-endpoint list --query "[?name=='$ServiceConnectionName'].id" -o tsv
           az devops service-endpoint update --id $ServiceConnectionId --enable-for-all true --output none --only-show-errors
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to enable service connection '$ServiceConnectionName' for all pipelines"
+            throw "Service connection update failed"
+          }
         }
       }
 
