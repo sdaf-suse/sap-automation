@@ -58,7 +58,7 @@ locals {
                                               name                   = coalesce(var.library_sapmedia_blob_container_name, module.sap_namegenerator.naming.resource_suffixes.sapbits)
                                             }
                                            shared_access_key_enabled                 = var.shared_access_key_enabled
-                                           public_network_access_enabled             = var.public_network_access_enabled
+                                           public_network_access_enabled             = var.public_network_access_enabled || !var.use_private_endpoint
                                            enable_firewall_for_keyvaults_and_storage = var.enable_firewall_for_keyvaults_and_storage
                                          }
 
@@ -85,7 +85,7 @@ locals {
                                                                                      }
 
                                            shared_access_key_enabled                 = var.shared_access_key_enabled
-                                           public_network_access_enabled             = var.public_network_access_enabled
+                                           public_network_access_enabled             = var.public_network_access_enabled || !var.use_private_endpoint
                                            enable_firewall_for_keyvaults_and_storage = var.enable_firewall_for_keyvaults_and_storage
                                          }
 
