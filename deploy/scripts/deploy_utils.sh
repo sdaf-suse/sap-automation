@@ -127,15 +127,50 @@ function fail_if_null {
 	exit 1
 }
 
+# 'az graph' is provided by the 'resource-graph' extension. When the extension is
+# missing, the Azure CLI prompts before installing it. That prompt is swallowed by
+# command substitution, so an unattended run appears to hang indefinitely.
+function ensure_resource_graph_extension {
+	if az extension show --name resource-graph --only-show-errors --output none 2>/dev/null; then
+		return 0
+	fi
+
+	echo "Installing the Azure CLI 'resource-graph' extension"
+
+	az config set extension.use_dynamic_install=yes_without_prompt --only-show-errors --output none 2>/dev/null || true
+
+	if az extension add --name resource-graph --only-show-errors --output none 2>/dev/null; then
+		return 0
+	fi
+
+	echo "Could not install the Azure CLI 'resource-graph' extension, falling back to 'az resource list'"
+	return 1
+}
+
 function getAndStoreTerraformStateStorageAccountDetails {
 	local REMOTE_STATE_SA="${1}"
 	local config_file_name="${2}"
 
 	echo "Trying to find the storage account:  ${REMOTE_STATE_SA}"
 
-	tfstate_resource_id=$(az graph query -q "Resources | join kind=leftouter (ResourceContainers | where type=='microsoft.resources/subscriptions' | project subscription=name, subscriptionId) on subscriptionId | where name == '$REMOTE_STATE_SA' | project id, name, subscription" --query data[0].id --output tsv)
+	tfstate_resource_id=""
 
-	fail_if_null tfstate_resource_id
+	if ensure_resource_graph_extension; then
+		tfstate_resource_id=$(az graph query -q "Resources | join kind=leftouter (ResourceContainers | where type=='microsoft.resources/subscriptions' | project subscription=name, subscriptionId) on subscriptionId | where name == '$REMOTE_STATE_SA' | project id, name, subscription" --query data[0].id --output tsv --only-show-errors) || tfstate_resource_id=""
+	fi
+
+	# Fall back to the core CLI when Resource Graph is unavailable or has not yet
+	# indexed a recently created storage account.
+	if [ -z "${tfstate_resource_id}" ] || [ "${tfstate_resource_id}" == "null" ]; then
+		tfstate_resource_id=$(az resource list --name "${REMOTE_STATE_SA}" --resource-type Microsoft.Storage/storageAccounts --query "[0].id" --output tsv --only-show-errors) || tfstate_resource_id=""
+	fi
+
+	# 'az ... --output tsv' returns an empty string rather than 'null' when nothing
+	# matches, so check for both before continuing with an unusable resource id.
+	if [ -z "${tfstate_resource_id}" ] || [ "${tfstate_resource_id}" == "null" ]; then
+		error_msg "Could not find the Terraform state storage account: ${REMOTE_STATE_SA}"
+		exit 1
+	fi
 
 	STATE_SUBSCRIPTION=$(echo "${tfstate_resource_id}" | cut -d/ -f3 | tr -d \" | xargs)
 	REMOTE_STATE_RG=$(echo "${tfstate_resource_id}" | cut -d/ -f5 | tr -d \" | xargs)

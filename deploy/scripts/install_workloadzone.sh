@@ -549,10 +549,8 @@ echo "Resource Group:                      ${REMOTE_STATE_RG}"
 echo "State file:                          ${key}.terraform.tfstate"
 echo "Target subscription:                 $ARM_SUBSCRIPTION_ID"
 
-tfstate_resource_id=$(az graph query -q "Resources | join kind=leftouter (ResourceContainers | where type=='microsoft.resources/subscriptions' | project subscription=name, subscriptionId) on subscriptionId | where name == '$REMOTE_STATE_SA' | project id, name, subscription" --query data[0].id --output tsv)
-TF_VAR_tfstate_resource_id=$tfstate_resource_id
-export TF_VAR_tfstate_resource_id
-
+# 'tfstate_resource_id' and 'TF_VAR_tfstate_resource_id' were already resolved and
+# exported by getAndStoreTerraformStateStorageAccountDetails above.
 TF_VAR_subscription_id="$ARM_SUBSCRIPTION_ID"
 export TF_VAR_subscription_id
 
