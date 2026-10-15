@@ -30,7 +30,7 @@ fi
 #Internal helper functions
 
 #process inputs - may need to check the option i for auto approve as it is not used
-INPUT_ARGUMENTS=$(getopt -n remover -o p:o:t:s:d:l:ahi --longoptions type:,parameterfile:,storageaccountname:,state_subscription:,deployer_tfstate_key:,landscape_tfstate_key:,control_plane_name:,ado,auto-approve,help -- "$@")
+INPUT_ARGUMENTS=$(getopt -n remover -o p:o:t:s:d:l:ahi --longoptions type:,parameterfile:,storageaccountname:,state_subscription:,deployer_tfstate_key:,landscape_tfstate_key:,control_plane_name:,ado,auto-approve,remove-state-file,remove_state_file,help -- "$@")
 VALID_ARGUMENTS=$?
 
 if [ "$VALID_ARGUMENTS" != "0" ]; then
@@ -38,6 +38,7 @@ if [ "$VALID_ARGUMENTS" != "0" ]; then
 fi
 
 called_from_ado=0
+remove_state_file=0
 eval set -- "$INPUT_ARGUMENTS"
 while :; do
 	case "$1" in
@@ -91,6 +92,10 @@ while :; do
 		;;
 	-i | --auto-approve)
 		approve="--auto-approve"
+		shift
+		;;
+	--remove-state-file | --remove_state_file)
+		remove_state_file=1
 		shift
 		;;
 	-a | --ado)
@@ -433,7 +438,7 @@ if [ "$resource_group_exist" ]; then
 		if [ -n "${approve}" ]; then
 			# shellcheck disable=SC2086
 			if terraform -chdir="${terraform_module_directory}" destroy "${allRemovalParameters[@]}" "$approve" -no-color -json -parallelism="$parallelism" | tee destroy_output.json; then
-				return_value=$?
+				return_value=${PIPESTATUS[0]}
 			else
 				return_value=${PIPESTATUS[0]}
 			fi
@@ -527,6 +532,13 @@ if [ "$resource_group_exist" ]; then
 
 else
 	return_value=0
+fi
+
+if { [ "${deployment_system}" == sap_landscape ] || [ "${deployment_system}" == sap_system ]; } && [ "${return_value}" -eq 0 ] && [ "${remove_state_file}" -eq 1 ]; then
+	if ! removeTerraformStateBlob "${REMOTE_STATE_SA}" "${STATE_SUBSCRIPTION}" "${key}.terraform.tfstate" "${useSAS}"; then
+		print_banner "Remover" "Failed to remove Terraform state blob" "error"
+		exit 1
+	fi
 fi
 
 if [ "${deployment_system}" == sap_deployer ]; then
