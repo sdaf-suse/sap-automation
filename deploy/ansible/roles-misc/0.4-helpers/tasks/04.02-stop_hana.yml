@@ -58,8 +58,8 @@
       register:                        hana_stopped
       failed_when:                     false
       until:                           hana_stopped.rc == 4
-      retries:                         "{{ hana_stop_verify_retries }}"
-      delay:                           "{{ hana_stop_verify_delay_in_seconds }}"
+      retries:                         "{{ hana_stop_verify_retries | default(30) }}"
+      delay:                           "{{ hana_stop_verify_delay_in_seconds | default(10) }}"
       vars:
         allow_world_readable_tmpfiles: true
       environment:
