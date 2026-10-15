@@ -25,7 +25,7 @@ cluster_cleanup_cmd:
   Suse: "crm resource cleanup"
 
 cluster_hana_cleanup_cmd:
-  RedHat: "pcs resource cleanup rsc_SAPHana_{{ db_sid | upper }}_HDB{{ db_instance_number }}"
+  RedHat: "pcs resource cleanup SAPHana_{{ db_sid | upper }}_{{ db_instance_number }}"
   Suse: >-
     crm resource cleanup
     {{ 'rsc_SAPHanaCon_' if use_hanasr_angi | default(false) else 'rsc_SAPHana_' }}{{ db_sid | upper }}_HDB{{ db_instance_number }}
