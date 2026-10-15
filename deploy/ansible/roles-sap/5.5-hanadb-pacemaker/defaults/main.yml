@@ -28,7 +28,7 @@ cluster_hana_cleanup_cmd:
   RedHat: "pcs resource cleanup SAPHana_{{ db_sid | upper }}_{{ db_instance_number }}"
   Suse: >-
     crm resource cleanup
-    {{ 'rsc_SAPHanaCon_' if use_hanasr_angi | default(false) else 'rsc_SAPHana_' }}{{ db_sid | upper }}_HDB{{ db_instance_number }}
+    {{ 'rsc_SAPHanaCon_' if is_certified_for_hanasr_angi | default(false) else 'rsc_SAPHana_' }}{{ db_sid | upper }}_HDB{{ db_instance_number }}
 
 
 # RHEL: Check maintenance mode command based on OS version
