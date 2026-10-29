@@ -472,23 +472,24 @@ if [ "$resource_group_exist" ]; then
 		if [ -n "${approve}" ]; then
 			# shellcheck disable=SC2086
 			if terraform -chdir="${terraform_module_directory}" destroy "${allRemovalParameters[@]}" "$approve" -no-color -json -parallelism="$parallelism" | tee -a destroy_output.json; then
-				return_value=$?
-				print_banner "Remover" "Terraform destroy succeeded" "success"
+				return_value=${PIPESTATUS[0]}
 			else
-				return_value=$?
-				print_banner "Remover" "Terraform destroy failed" "error"
-				exit 1
+				return_value=${PIPESTATUS[0]}
 			fi
 		else
 			# shellcheck disable=SC2086
 			if terraform -chdir="${terraform_module_directory}" destroy "${allRemovalParameters[@]}" -parallelism="$parallelism"; then
 				return_value=$?
-				print_banner "Remover" "Terraform destroy succeeded" "success"
 			else
 				return_value=$?
-				print_banner "Remover" "Terraform destroy failed" "error"
-				exit 1
 			fi
+		fi
+
+		if [ 0 -eq "$return_value" ]; then
+			print_banner "Remover" "Terraform destroy succeeded" "success"
+		else
+			print_banner "Remover" "Terraform destroy failed" "error"
+			exit 1
 		fi
 
 		if [ -f destroy_output.json ]; then
