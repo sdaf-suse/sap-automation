@@ -9,7 +9,11 @@
 # +------------------------------------4--------------------------------------*/
 
 - name:                                "5.5.5 HANA Pacemaker configuration - Cleanup resources"
-  ansible.builtin.shell:               "{{ cluster_cleanup_cmd[ansible_os_family] }}"
+  ansible.builtin.command:             "{{ cluster_hana_cleanup_cmd[ansible_os_family] }}"
+  register:                            cluster_hana_cleanup
+  retries:                             3
+  delay:                               15
+  until:                               cluster_hana_cleanup.rc == 0
   timeout:                             180
   when:
     - inventory_hostname == primary_instance_name
