@@ -419,8 +419,8 @@ fi
 
 
 terraform_destroy_succeeded=false
-if [ "$resource_group_exist" == true ]; then
-	print_banner "Remover" "Resource group exists, proceeding with destroy" "info"
+if [ "$resource_group_exist" == true ] || [ "$deployment_system" == sap_landscape ] || [ "$deployment_system" == sap_system ]; then
+	print_banner "Remover" "Proceeding with Terraform destroy" "info"
 
 	if [ "$deployment_system" == "sap_deployer" ]; then
 		terraform -chdir="${terraform_bootstrap_directory}" refresh "${allRemovalParameters[@]}" 
