@@ -193,6 +193,58 @@ function getAndStoreTerraformStateStorageAccountDetails {
 	echo "Found the storage account:           ${REMOTE_STATE_SA}"
 }
 
+function removeTerraformStateBlob {
+	local storage_account_name="${1}"
+	local subscription_id="${2}"
+	local state_key="${3}"
+	local allow_shared_key_access="${4}"
+	local blob_exists
+	local -a auth_arguments
+
+	if [ -z "${storage_account_name}" ] || [ -z "${subscription_id}" ] || [ -z "${state_key}" ]; then
+		echo "Storage account, subscription, and Terraform state key are required to remove the state blob." >&2
+		return 1
+	fi
+
+	if [ "${allow_shared_key_access}" == "true" ]; then
+		auth_arguments=(--auth-mode key)
+	else
+		auth_arguments=(--auth-mode login)
+	fi
+
+	blob_exists=$(az storage blob exists \
+		--account-name "${storage_account_name}" \
+		--subscription "${subscription_id}" \
+		--container-name tfstate \
+		--name "${state_key}" \
+		"${auth_arguments[@]}" \
+		--query exists \
+		--output tsv \
+		--only-show-errors) || return $?
+
+	case "${blob_exists}" in
+		true)
+			az storage blob delete \
+				--account-name "${storage_account_name}" \
+				--subscription "${subscription_id}" \
+				--container-name tfstate \
+				--name "${state_key}" \
+				"${auth_arguments[@]}" \
+				--delete-snapshots include \
+				--output none \
+				--only-show-errors || return $?
+			echo "Removed Terraform state blob: ${state_key}"
+			;;
+		false)
+			echo "Terraform state blob was not found; nothing to remove: ${state_key}"
+			;;
+		*)
+			echo "Could not determine whether the Terraform state blob exists: ${state_key}" >&2
+			return 1
+			;;
+	esac
+}
+
 ##############################################################################
 # Function to get the value of a variable from the Azure App Configuration
 # Arguments:

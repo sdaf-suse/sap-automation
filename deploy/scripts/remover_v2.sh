@@ -82,7 +82,8 @@ function source_helper_scripts() {
 function parse_arguments() {
 	local input_opts
 	approve=""
-	input_opts=$(getopt -n remover_v2 -o p:t:o:d:l:s:n:c:w:ahifg --longoptions type:,parameter_file:,storage_accountname:,deployer_tfstate_key:,landscape_tfstate_key:,state_subscription:,application_configuration_name:,control_plane_name:,workload_zone_name:,ado,auto-approve,force,help,github -- "$@")
+	remove_state_file=0
+	input_opts=$(getopt -n remover_v2 -o p:t:o:d:l:s:n:c:w:ahifg --longoptions type:,parameter_file:,storage_accountname:,deployer_tfstate_key:,landscape_tfstate_key:,state_subscription:,application_configuration_name:,control_plane_name:,workload_zone_name:,ado,auto-approve,remove-state-file,remove_state_file,force,help,github -- "$@")
 	is_input_opts_valid=$?
 
 	if [[ "${is_input_opts_valid}" != "0" ]]; then
@@ -181,6 +182,10 @@ function parse_arguments() {
 			;;
 		-i | --auto-approve)
 			approve="--auto-approve"
+			shift
+			;;
+		--remove-state-file | --remove_state_file)
+			remove_state_file=1
 			shift
 			;;
 		-h | --help)
@@ -827,6 +832,17 @@ function sdaf_remover() {
 			rm destroy_output.json
 		fi
 
+	fi
+
+	if [[ ( "${deployment_system}" == sap_landscape || "${deployment_system}" == sap_system ) && "${return_value}" -eq 0 && "${remove_state_file}" -eq 1 ]]; then
+		if ! removeTerraformStateBlob \
+			"${terraform_storage_account_name}" \
+			"${terraform_storage_account_subscription_id}" \
+			"${key}.terraform.tfstate" \
+			"${useSAS}"; then
+			print_banner "$banner_title" "Failed to remove Terraform state blob" "error"
+			exit 1
+		fi
 	fi
 
 	if [ -f "${system_environment_file_name}" ]; then

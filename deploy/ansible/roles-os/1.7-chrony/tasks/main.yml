@@ -82,6 +82,7 @@
 - name:                                "1.7 chrony - Initialise facts used to manage chrony settings"  # noqa jinja[spacing]
   ansible.builtin.set_fact:
     chronyd_restart_required:          "{{ chrony_package_installed is changed }}"
+    chrony_use_dropins:                "{{ ansible_os_family | upper == 'SUSE' and ansible_distribution_major_version | default('15') | int >= 16 }}"
     # Generate list of chrony config entries that may need to be added
     chrony_conf_entries: >-
       {%- set _conf_entries =[] -%}
@@ -93,6 +94,15 @@
       {%-   endfor -%}
       {%- endif -%}
       {{- _conf_entries -}}
+
+- name:                                "1.7 chrony - Check administrative configuration files"
+  ansible.builtin.stat:
+    path:                              "{{ item }}"
+  loop:
+    - /etc/chrony.conf
+    - /etc/chrony.d/pool.conf
+  register:                            chrony_admin_configs
+  when:                                chrony_use_dropins | bool
 
 - name:                                "1.7 chrony - Show generated list of chrony conf entries"
   ansible.builtin.debug:
@@ -141,6 +151,50 @@
   when:
     # If no custom pool or servers specified, then use defaults
     - (chrony_conf_entries | count) == 0
+    - not (chrony_use_dropins | bool)
+
+- name:                                "1.7 chrony - Restore SLES 16+ default sources"
+  block:
+    - name:                            "1.7 chrony - Remove SAP chrony drop-in"
+      ansible.builtin.file:
+        path:                          /etc/chrony.d/99-sap.conf
+        state:                         absent
+      register:                        chrony_dropin_removed
+
+    - name:                            "1.7 chrony - Restore sources disabled by SAP"
+      ansible.builtin.replace:
+        path:                          "{{ item.item }}"
+        regexp:                        '^# SAP DISABLED SOURCE (.*)$'
+        replace:                       '\1'
+      loop:                            "{{ chrony_admin_configs.results }}"
+      when:                            item.stat.exists
+      register:                        chrony_sources_restored
+
+    - name:                            "1.7 chrony - Read administrative pool override"
+      ansible.builtin.slurp:
+        src:                           /etc/chrony.d/pool.conf
+      when:                            chrony_admin_configs.results[1].stat.exists
+      register:                        chrony_pool_override
+
+    - name:                            "1.7 chrony - Remove SAP-owned vendor pool mask"
+      ansible.builtin.file:
+        path:                          /etc/chrony.d/pool.conf
+        state:                         absent
+      when:
+        - chrony_admin_configs.results[1].stat.exists
+        - chrony_pool_override.content | b64decode | trim == '# SAP managed override of the vendor chrony pool'
+      register:                        chrony_pool_mask_removed
+
+    - name:                            "1.7 chrony - Set chrony facts"
+      ansible.builtin.set_fact:
+        chronyd_restart_required: >-
+          {{ (chronyd_restart_required | bool) or
+             (chrony_dropin_removed is changed) or
+             (chrony_sources_restored is changed) or
+             (chrony_pool_mask_removed is changed) }}
+  when:
+    - (chrony_conf_entries | count) == 0
+    - chrony_use_dropins | bool
 
 # -------------------------------------+---------------------------------------8
 #
@@ -193,7 +247,76 @@
   when:
     # If custom pool or servers specified
     - (chrony_conf_entries | count) > 0
+    # SLES 16 uses drop-in files instead
+    - not (chrony_use_dropins | bool)
   tags: ansible_skip_lint
+
+# SLES 16+: use drop-in file for custom chrony settings
+- name:                                "1.7 chrony - Setup chrony with override settings (SLES 16+ drop-in)"
+  block:
+    - name:                            "1.7 chrony - Ensure /etc/chrony.d directory exists"
+      ansible.builtin.file:
+        path:                          /etc/chrony.d
+        state:                         directory
+        mode:                          '0755'
+
+    # confdir gives /etc files precedence over identically named vendor files.
+    - name:                            "1.7 chrony - Mask the vendor pool without replacing admin settings"
+      ansible.builtin.copy:
+        dest:                          /etc/chrony.d/pool.conf
+        mode:                          '0644'
+        content:                       "# SAP managed override of the vendor chrony pool\n"
+      when:                            not chrony_admin_configs.results[1].stat.exists
+      register:                        chrony_pool_mask_created
+
+    - name:                            "1.7 chrony - Disable administrative default sources"
+      ansible.builtin.replace:
+        path:                          "{{ item.item }}"
+        regexp:                        '^([ \t]*(?:pool|server)[ \t]+.*)$'
+        replace:                       '# SAP DISABLED SOURCE \1'
+      loop:                            "{{ chrony_admin_configs.results }}"
+      when:                            item.stat.exists
+      register:                        chrony_sources_disabled
+
+    - name:                            "1.7 chrony - Add/Update custom settings drop-in"
+      ansible.builtin.copy:
+        dest:                          /etc/chrony.d/99-sap.conf
+        mode:                          '0644'
+        content: |
+          {% for entry in chrony_conf_entries -%}
+          {{ entry.type }} {{ entry.name }} {{ entry.opts | join(' ') }}
+          {% endfor %}
+      register:                        chrony_conf_updated
+
+    - name:                            "1.7 chrony - Parse effective chrony configuration"
+      ansible.builtin.command:
+        argv:
+          - chronyd
+          - -p
+          - -f
+          - "{{ '/etc/chrony.conf' if chrony_admin_configs.results[0].stat.exists else '/usr/etc/chrony.conf' }}"
+      changed_when:                    false
+      register:                        chrony_effective_config
+
+    - name:                            "1.7 chrony - Verify only configured pool and server sources are enabled"
+      when:                            not ansible_check_mode
+      ansible.builtin.assert:
+        that:
+          - >-
+            chrony_effective_config.stdout | regex_findall('(?im)^\s*(?:pool|server)\s+(\S+)') | sort ==
+            chrony_conf_entries | map(attribute='name') | list | sort
+        fail_msg:                      "Chrony includes unexpected sources or does not load the SAP drop-in; check the host's main configuration and confdir settings."
+
+    - name:                            "1.7 chrony - Set chrony facts"
+      ansible.builtin.set_fact:
+        chronyd_restart_required: >-
+          {{ ((chronyd_restart_required | bool) or
+              (chrony_conf_updated is changed) or
+              (chrony_pool_mask_created is changed) or
+              (chrony_sources_disabled is changed)) }}
+  when:
+    - (chrony_conf_entries | count) > 0
+    - chrony_use_dropins | bool
 
 - name:                                "1.7 chrony - Do we need to restart chronyd?"
   ansible.builtin.debug:
@@ -232,7 +355,7 @@
 # is started/running.
 #
 # -------------------------------------+---------------------------------------8
-- name:                                Ensure chronyd service is running
+- name:                                "1.7 chrony - Ensure chronyd service is running"
   ansible.builtin.service:
     name:                              chronyd
     state:                             started
