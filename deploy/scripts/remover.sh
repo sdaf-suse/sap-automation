@@ -384,27 +384,34 @@ if [ -n "${REMOTE_STATE_SA}" ]; then
 	fi
 fi
 
-if ! created_resource_group_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_id); then
-	print_banner "Remover" "Failed to read the resource group ID from Terraform; remote state retained" "error"
-	exit 1
-fi
-if ! created_resource_group_subscription_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id); then
-	print_banner "Remover" "Failed to read the resource group subscription from Terraform; remote state retained" "error"
-	exit 1
-fi
-if [ -z "${created_resource_group_id}" ] || [ -z "${created_resource_group_subscription_id}" ]; then
-	print_banner "Remover" "Terraform resource group outputs are empty; remote state retained" "error"
-	exit 1
-fi
-if ! resource_group_exist=$(az group exists --name "${created_resource_group_id##*/}" --subscription "${created_resource_group_subscription_id}" --output tsv); then
-	print_banner "Remover" "Failed to check whether the resource group exists; remote state retained" "error"
-	exit 1
-fi
-case "${resource_group_exist}" in
-	true | false) ;;
+resource_group_exist=false
+# Workloads may retain resources outside their group or have no saved outputs.
+case "${deployment_system}" in
+	sap_system | sap_landscape) ;;
 	*)
-		print_banner "Remover" "Invalid resource group existence response; remote state retained" "error"
-		exit 1
+		if ! created_resource_group_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_id); then
+			print_banner "Remover" "Failed to read the resource group ID from Terraform; remote state retained" "error"
+			exit 1
+		fi
+		if ! created_resource_group_subscription_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id); then
+			print_banner "Remover" "Failed to read the resource group subscription from Terraform; remote state retained" "error"
+			exit 1
+		fi
+		if [ -z "${created_resource_group_id}" ] || [ -z "${created_resource_group_subscription_id}" ]; then
+			print_banner "Remover" "Terraform resource group outputs are empty; remote state retained" "error"
+			exit 1
+		fi
+		if ! resource_group_exist=$(az group exists --name "${created_resource_group_id##*/}" --subscription "${created_resource_group_subscription_id}" --output tsv); then
+			print_banner "Remover" "Failed to check whether the resource group exists; remote state retained" "error"
+			exit 1
+		fi
+		case "${resource_group_exist}" in
+			true | false) ;;
+			*)
+				print_banner "Remover" "Invalid resource group existence response; remote state retained" "error"
+				exit 1
+				;;
+		esac
 		;;
 esac
 
