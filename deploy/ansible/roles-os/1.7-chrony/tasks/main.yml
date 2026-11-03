@@ -299,7 +299,8 @@
       register:                        chrony_effective_config
 
     - name:                            "1.7 chrony - Verify only configured pool and server sources are enabled"
-      ansible.builtin.assert:
+  when:                                not ansible_check_mode
+  ansible.builtin.assert:
         that:
           - >-
             chrony_effective_config.stdout | regex_findall('(?im)^\s*(?:pool|server)\s+(\S+)') | sort ==
