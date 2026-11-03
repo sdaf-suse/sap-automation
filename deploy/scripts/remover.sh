@@ -384,16 +384,29 @@ if [ -n "${REMOTE_STATE_SA}" ]; then
 	fi
 fi
 
-created_resource_group_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_id | tr -d \")
-created_resource_group_id_length="${#created_resource_group_id}"
-created_resource_group_subscription_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id | tr -d \")
-created_resource_group_subscription_id_length="${#created_resource_group_subscription_id}"
-
-if [ "${created_resource_group_id_length}" -eq 0 ] && [ "${created_resource_group_subscription_id_length}" -eq 0 ]; then
-	resource_group_exist=$(az group exists --name "${created_resource_group_id}" --subscription "${created_resource_group_subscription_id}")
-else
-	resource_group_exist=true
+if ! created_resource_group_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_id); then
+	print_banner "Remover" "Failed to read the resource group ID from Terraform; remote state retained" "error"
+	exit 1
 fi
+if ! created_resource_group_subscription_id=$(terraform -chdir="${terraform_module_directory}" output -no-color -raw created_resource_group_subscription_id); then
+	print_banner "Remover" "Failed to read the resource group subscription from Terraform; remote state retained" "error"
+	exit 1
+fi
+if [ -z "${created_resource_group_id}" ] || [ -z "${created_resource_group_subscription_id}" ]; then
+	print_banner "Remover" "Terraform resource group outputs are empty; remote state retained" "error"
+	exit 1
+fi
+if ! resource_group_exist=$(az group exists --name "${created_resource_group_id##*/}" --subscription "${created_resource_group_subscription_id}" --output tsv); then
+	print_banner "Remover" "Failed to check whether the resource group exists; remote state retained" "error"
+	exit 1
+fi
+case "${resource_group_exist}" in
+	true | false) ;;
+	*)
+		print_banner "Remover" "Invalid resource group existence response; remote state retained" "error"
+		exit 1
+		;;
+esac
 
 allRemovalParameters=(-var-file ${parameterfile_path})
 if [ -f terraform.tfvars ]; then
@@ -405,7 +418,8 @@ if [ "$called_from_ado" = "1" ] || [ "$approve" == "--auto-approve" ]; then
 fi
 
 
-if [ "$resource_group_exist" ]; then
+terraform_destroy_succeeded=false
+if [ "$resource_group_exist" == true ]; then
 	print_banner "Remover" "Resource group exists, proceeding with destroy" "info"
 
 	if [ "$deployment_system" == "sap_deployer" ]; then
@@ -531,11 +545,15 @@ if [ "$resource_group_exist" ]; then
 
 	fi
 
+	if { [ "${deployment_system}" == sap_landscape ] || [ "${deployment_system}" == sap_system ]; } && [ "${return_value}" -eq 0 ]; then
+		terraform_destroy_succeeded=true
+	fi
 else
+	print_banner "Remover" "Resource group does not exist; skipping destroy and retaining remote state" "info"
 	return_value=0
 fi
 
-if { [ "${deployment_system}" == sap_landscape ] || [ "${deployment_system}" == sap_system ]; } && [ "${return_value}" -eq 0 ] && [ "${remove_state_file}" -eq 1 ]; then
+if [ "${terraform_destroy_succeeded}" == true ] && [ "${remove_state_file}" -eq 1 ]; then
 	if ! removeTerraformStateBlob "${REMOTE_STATE_SA}" "${STATE_SUBSCRIPTION}" "${key}.terraform.tfstate" "${useSAS}"; then
 		print_banner "Remover" "Failed to remove Terraform state blob" "error"
 		exit 1
@@ -546,7 +564,7 @@ if [ "${deployment_system}" == sap_deployer ]; then
 	sed -i /deployer_tfstate_key/d "${system_environment_file_name}"
 fi
 
-if [ "${deployment_system}" == sap_landscape ]; then
+if [ "${deployment_system}" == sap_landscape ] && [ "${terraform_destroy_succeeded}" == true ]; then
 	rm "${system_environment_file_name}"
 fi
 
